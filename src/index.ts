@@ -10,16 +10,22 @@ const http = require("http").createServer(app);
 app.get("/status", (req, res) => {
   res.send({
     status: "ok"
-  })
+  });
 });
 
 app.post("/video", (req, res) => {
-  let params = req.body;
-  console.info("Requested video with params:", params);
+  let count = req.body.count || 1;
+  let videos: Video[] = [];
 
-  let video: Video = VIDEOS[Math.floor(Math.random() * VIDEOS.length)];
+  console.info(`Requested ${count} videos...`);
+
+  for (let i = 0; i < count; i++) {
+    // Simply select a random video
+    videos.push(VIDEOS[Math.floor(Math.random() * VIDEOS.length)]);
+  }
+
   res.status(201);
-  res.send(video);
+  res.send(videos);
 });
 
 const server = http.listen(process.env.PORT || 3000, () => {
