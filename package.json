@@ -1,0 +1,31 @@
+{
+  "name": "openvideoserver",
+  "version": "1.0.0",
+  "description": "The server for OpenVideo, an open-source TikTok alternative that respects your privacy.",
+  "main": "build/index.js",
+  "scripts": {
+    "tsc": "tsc",
+    "start": "tsc && node ./build/index.js"
+  },
+  "keywords": [],
+  "author": "raphydaphy",
+  "license": "CC-BY-NC-SA-4.0",
+  "dependencies": {
+    "@types/express": "4.17.4",
+    "@types/mysql": "2.15.9",
+    "@types/socket.io": "2.1.4",
+    "aws-sdk": "^2.712.0",
+    "express": "4.17.1",
+    "mysql": "2.18.1",
+    "socket.io": "2.3.0",
+    "typescript": "^3.8.3"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/TikTokClone/server.git"
+  },
+  "bugs": {
+    "url": "https://github.com/TikTokClone/server/issues"
+  },
+  "homepage": "https://github.com/TikTokClone/server#readme"
+}
