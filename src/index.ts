@@ -1,5 +1,5 @@
 import express = require("express");
-import {Video, VIDEOS} from "./video/video";
+const db = require("./neo4j")();
 
 const app: express.Application = express();
 app.set("port", process.env.PORT || 3000);
@@ -13,21 +13,42 @@ app.get("/status", (req, res) => {
   });
 });
 
-app.post("/video", (req, res) => {
-  let count = req.body.count || 1;
-  let videos: Video[] = [];
-
-  console.info(`Requested ${count} videos...`);
-
-  for (let i = 0; i < count; i++) {
-    // Simply select a random video
-    videos.push(VIDEOS[Math.floor(Math.random() * VIDEOS.length)]);
-  }
-
-  res.status(201);
-  res.send(videos);
+app.get("/user", async(req, res) => {
+  res.send(await db.getUser(
+    req.query.name
+  ));
 });
 
-const server = http.listen(process.env.PORT || 3000, () => {
+app.post("/user", async (req, res) => {
+  res.send(await db.createUser(
+    req.body.name,
+    req.body.displayName,
+    req.body.profilePicURL
+  ));
+});
+
+app.post("/sound", async (req, res) => {
+  res.send(await db.createSound(
+    req.body.name,
+    req.body.user
+  ));
+});
+
+app.post("/video", async (req, res) => {
+  res.send(await db.createVideo(
+    req.body.name,
+    req.body.user,
+    req.body.sound
+  ));
+});
+
+app.post("/follow", async (req, res) => {
+  res.send(await db.follow(
+    req.body.me,
+    req.body.them
+  ));
+});
+
+const server = http.listen(process.env.PORT || 3001, () => {
   console.log("Listening on port %d.", server.address().port);
 });
