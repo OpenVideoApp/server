@@ -13,8 +13,14 @@ class Database {
   constructor(host?: string, user?: string, pass?: string) {
     this.driver = neo4j.driver(
       host || "bolt://localhost:8000",
-      neo4j.auth.basic(user || 'neo4j',pass || "password")
+      neo4j.auth.basic(user || 'neo4j',pass || "password"),
+        {encrypted: true}
     );
+    this.driver.verifyConnectivity().then((serverInfo) => {
+      console.info(`Connected to database on '${serverInfo.address}' with version '${serverInfo.version}'`);
+    }).catch((err) => {
+      console.error("Failed to connect to database:", err);
+    });
   }
 
   async createUser(name: string, password: string, displayName: string, profilePicURL: string): Promise<User | APIError> {

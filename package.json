@@ -4,7 +4,8 @@
   "description": "The server for OpenVideo, an open-source video sharing network that respects your privacy.",
   "main": "build/index.js",
   "scripts": {
-    "tsc": "tsc"
+    "tsc": "tsc",
+    "start": "tsc && node ./build/index.js"
   },
   "keywords": [],
   "author": "raphydaphy",
