@@ -2,3 +2,5 @@ node_modules/
 build/
 test/
 .idea/
+dev/neo4j
+dev/.env
