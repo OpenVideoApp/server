@@ -32,6 +32,9 @@ const resolvers: IResolvers = {
     async comment(_: void, args: any, auth: AuthData) {
       return db.getComment(auth, args.id);
     },
+    async comments(_: void, args: any, auth: AuthData) {
+      return db.getComments(auth, args.videoId);
+    },
     async me(_: void, args: any, auth: AuthData) {
       return auth.valid ? db.getUser(auth.username as string) : new APIError("Invalid Login");
     },
@@ -60,6 +63,9 @@ const resolvers: IResolvers = {
     },
     async addComment(_: void, args: any, auth: AuthData) {
       return db.addComment(auth, args.videoId, args.body);
+    },
+    async likeComment(_: void, args: any, auth: AuthData) {
+      return db.likeComment(auth, args.commentId, args.remove);
     }
   }
 };

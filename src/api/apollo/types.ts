@@ -57,9 +57,10 @@ const types = `
   type Comment {
     id: String!
     createdAt: Int!
-    video: Video!
     user: User!
     body: String!
+    likes: Int!
+    liked: Boolean!
   }
   
   union CommentInfo = Comment | APIError
@@ -68,7 +69,9 @@ const types = `
     user(name: String!): UserInfo!
     sound(id: String!): SoundInfo!
     video(id: String!): VideoInfo!
+    
     comment(id: String!): CommentInfo!
+    comments(videoId: String!): [Comment]
     
     me: UserInfo!
     videos(count: Int = 1): [Video!]
@@ -85,6 +88,7 @@ const types = `
     likeVideo(videoId: String!, remove: Boolean = false): APIResponse!
     
     addComment(videoId: String!, body: String!): CommentInfo!
+    likeComment(commentId: String!, remove: Boolean = false): APIResponse!
   }
 `;
 

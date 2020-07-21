@@ -62,21 +62,24 @@ export class VideoComment {
   id: string;
   createdAt: number;
   body: string;
+  likes: number;
   user?: User;
-  video?: Video;
+  liked: boolean;
 
   constructor(comment: VideoComment) {
     this.id = comment.id;
     this.createdAt = comment.createdAt;
     this.body = comment.body;
+    this.likes = comment.likes;
     this.user = comment.user;
-    this.video = comment.video;
+    this.liked = comment.liked || false;
   }
 
   static fromQuery(res: Record<string, any>, prop: string): VideoComment {
     let comment = new VideoComment(res.get(prop).properties);
-    comment.video = Video.fromQuery(res, prop + "Video");
+    comment.likes = neo4j.int(res.get(prop + "Likes")).toInt();
     comment.user = User.fromQuery(res, prop + "User");
+    if (res["keys"].includes(prop + "Liked")) comment.liked = res.get(prop + "Liked");
     return comment;
   }
 

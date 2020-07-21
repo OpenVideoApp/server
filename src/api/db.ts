@@ -403,30 +403,95 @@ class Database {
     }
   }
 
+  // TODO: deduplication with likeVideo ?
+  async likeComment(auth: AuthData, commentId: string, remove: boolean = false) {
+    if (!isUuid(commentId)) return new APIError("Invalid Comment ID");
+
+    if (!auth.valid) return APIError.Authentication;
+    let session = this.driver.session();
+
+    try {
+      let query = await session.run(`
+        MATCH (user: User)${remove ? `-[like: LIKED]->` : ", "}(comment: Comment)
+        WHERE user.name = $username AND comment.id = $commentId
+        ${remove ? `
+          DETACH DELETE like
+          RETURN comment.id
+        ` : `
+          MERGE (user)-[like: LIKED]->(comment)
+          SET like.at = timestamp()
+          RETURN like
+        `}
+      `, {
+        username: auth.username,
+        commentId: commentId
+      });
+      await session.close();
+      return query.records.length == 0 ? APIResult.Neutral : APIResult.Success;
+    } catch (error) {
+      console.warn("Failed to like comment:", error);
+      await session.close();
+      return APIError.Internal;
+    }
+  }
+
+  // TODO: deduplication between getComments
   async getComment(auth: AuthData, id: string): Promise<VideoComment | APIError> {
     if (!isUuid(id)) return new APIError("Invalid Comment ID");
     let session = this.driver.session();
 
     try {
-      let query = await Database.queryVideo(session, "commentVideo", {
+      let query = await session.run(`
+        MATCH (commentUser: User)-[:COMMENTED]->(comment: Comment)
+        WHERE comment.id = $commentId
+        OPTIONAL MATCH (likeUser: User)-[:LIKED]->(comment)
+        RETURN comment, commentUser, COUNT(DISTINCT likeUser) AS commentLikes${auth.valid ? `,
+        EXISTS((:User {name: $authenticatedUser})-[:LIKED]->(comment)) AS commentLiked` : ""}
+      `, {
         commentId: id,
         authenticatedUser: auth.valid ? auth.username : null
-      }, [
-        `MATCH (commentUser: User)-[:COMMENTED]->(comment: Comment)-[:ON]->(commentVideo)
-        WHERE comment.id = $commentId
-        MATCH`, "",
-        "WITH comment, commentUser,",
-        "OPTIONAL MATCH",
-        "RETURN comment, commentUser,"
-      ]);
+      });
       await session.close();
 
-      if (query.records.length == 0) return new APIError("Invalid Video");
+      if (query.records.length == 0) return new APIError("Invalid Comment");
       return VideoComment.fromQuery(query.records[0], "comment");
     } catch (error) {
       console.warn("Failed to get comment:", error);
       await session.close();
       return APIError.Internal;
+    }
+  }
+
+  // TODO: get more than 10 comments
+  async getComments(auth: AuthData, videoId: string): Promise<VideoComment[]> {
+    if (!isUuid(videoId)) return [];
+    let session = this.driver.session();
+
+    try {
+      let query = await session.run(`
+        MATCH (commentUser: User)-[:COMMENTED]->(comment: Comment)-[:ON]->(video: Video)
+        WHERE video.id = $videoId
+        OPTIONAL MATCH (likeUser: User)-[:LIKED]->(comment)
+        RETURN comment, commentUser, COUNT(DISTINCT likeUser) AS commentLikes${auth.valid ? `,
+        EXISTS((:User {name: $authenticatedUser})-[:LIKED]->(comment)) AS commentLiked` : ""}
+        LIMIT 10
+      `, {
+        videoId: videoId,
+        authenticatedUser: auth.valid ? auth.username : null
+      });
+
+      if (query.records.length == 0) return [];
+
+      let comments: VideoComment[] = [];
+      for (let comment = 0; comment < query.records.length; comment++) {
+        comments.push(VideoComment.fromQuery(query.records[comment], "comment"));
+      }
+
+      return comments;
+    } catch (error) {
+      console.warn("Failed to get comments:", error);
+      await session.close();
+      return [];
     }
   }
 
