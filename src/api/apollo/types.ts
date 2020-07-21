@@ -44,6 +44,7 @@ const types = `
     views: Int!
     likes: Int!
     comments: Int!
+    liked: Boolean!
   }
   
   type WatchData {

@@ -258,12 +258,15 @@ class Database {
   }
 
 
-  async getVideo(id: string): Promise<Video | APIError> {
+  async getVideo(auth: AuthData, id: string): Promise<Video | APIError> {
     if (!isUuid(id)) return new APIError("Invalid Video ID");
     let session = this.driver.session();
 
     try {
-      let query = await Database.queryVideo(session, "video", {videoId: id});
+      let query = await Database.queryVideo(session, "video", {
+        videoId: id,
+        authenticatedUser: auth.valid ? auth.username : null
+      });
       await session.close();
       if (query.records.length == 0) return new APIError("Invalid Video");
       return Video.fromQuery(query.records[0], "video");
@@ -281,7 +284,7 @@ class Database {
 
     try {
       let query = await Database.queryVideo(session, "video", {
-        username: auth.username,
+        authenticatedUser: auth.username,
         count: count
       }, [
         "MATCH", "", "WITH", "OPTIONAL MATCH", "RETURN",
@@ -379,11 +382,11 @@ class Database {
           createdAt: unixTime(),
           body: body
         },
-        username: auth.username,
+        authenticatedUser: auth.username,
         commentVideoId: videoId
       }, [
         "MATCH (commentUser: User),",
-        "WHERE commentUser.name = $username AND commentVideo.id = $commentVideoId",
+        "WHERE commentUser.name = $authenticatedUser AND commentVideo.id = $commentVideoId",
         `CREATE (commentUser)-[r:COMMENTED]->(comment: Comment $comment)-[on: ON]->(commentVideo)
         WITH comment, commentUser,`,
         "OPTIONAL MATCH",
@@ -400,13 +403,14 @@ class Database {
     }
   }
 
-  async getComment(id: string): Promise<VideoComment | APIError> {
+  async getComment(auth: AuthData, id: string): Promise<VideoComment | APIError> {
     if (!isUuid(id)) return new APIError("Invalid Comment ID");
     let session = this.driver.session();
 
     try {
       let query = await Database.queryVideo(session, "commentVideo", {
-        commentId: id
+        commentId: id,
+        authenticatedUser: auth.valid ? auth.username : null
       }, [
         `MATCH (commentUser: User)-[:COMMENTED]->(comment: Comment)-[:ON]->(commentVideo)
         WHERE comment.id = $commentId
@@ -427,7 +431,7 @@ class Database {
   }
 
   private static async queryVideo(session: Session, name: string, props: any, query: string[] = [], matchVideoId = true) {
-    return session.run(`
+    return session.run( `
       ${query.length > 0 ? query[0] : "MATCH"} (${name}SoundUser: User)-[:RECORDED]->(${name}Sound: Sound)<-[:USES]-(${name}${matchVideoId ? ": Video" : ""}),
       (${name})<-[:FILMED]-(${name}User: User)
       ${query.length > 1 ? query[1] : `WHERE ${name}.id = $${name}Id`}
@@ -436,7 +440,8 @@ class Database {
       (${name})<-[${name}Like: LIKED]-(:User), (${name})<-[${name}Comment: ON]-(:Comment)
       ${query.length > 4 ? query[4] : "RETURN"} ${name}, ${name}User, ${name}Sound, ${name}SoundUser, 
       COUNT(DISTINCT ${name}Watch) AS ${name}Views, COUNT(DISTINCT ${name}Like) AS ${name}Likes,
-      COUNT(DISTINCT ${name}Comment) AS ${name}Comments
+      COUNT(DISTINCT ${name}Comment) AS ${name}Comments ${props.authenticatedUser ? `,
+      EXISTS((:User {name: $authenticatedUser})-[:LIKED]->(${name})) AS ${name}Liked` : ""}
       ${query.length > 5 ? query[5] : ""}
     `, props);
   }

@@ -12,7 +12,7 @@ export class Video {
   likes: number;
   shares?: number;
   comments: number;
-  liked?: boolean;
+  liked: boolean;
   user?: User;
   sound?: Sound;
 
@@ -25,7 +25,7 @@ export class Video {
     this.likes = video.likes;
     this.shares = video.shares;
     this.comments = video.comments;
-    this.liked = video.liked;
+    this.liked = video.liked || false;
     this.user = video.user;
     this.sound = video.sound;
   }
@@ -37,6 +37,7 @@ export class Video {
     video.views = neo4j.int(res.get(prop + "Views")).toInt();
     video.likes = neo4j.int(res.get(prop + "Likes")).toInt();
     video.comments = neo4j.int(res.get(prop + "Comments")).toInt();
+    if (res["keys"].includes(prop + "Liked")) video.liked = res.get(prop + "Liked");
     return video;
   }
 
@@ -83,59 +84,3 @@ export class VideoComment {
     return "Comment";
   }
 }
-/*
-export const VIDEOS: Video[] = [
-  new Video({
-    src: "cah-ad.mp4",
-    desc: "I made this site so that you can play #cardsagainsthumanity despite being in #quarantine! Link in bio.",
-    likes: 168302,
-    comments: 3048,
-    shares: 34931,
-    liked: false,
-    user: USERS["raphydaphy"],
-    sound: new Sound({
-      desc: "cards against quarantine",
-      user: USERS["raphydaphy"]
-    })
-  }),
-  new Video({
-    src: "dorime.mp4",
-    desc: "It haunts my #dreams",
-    likes: 2843967,
-    comments: 28483,
-    shares: 43812,
-    liked: false,
-    user: USERS["mariob0y"],
-    sound: new Sound({
-      desc: "dorimeee (spooky)",
-      user: USERS["raphydaphy"]
-    })
-  }),
-  new Video({
-    src: "mario_piano.mp4",
-    desc: "My #piano cover of #mario - #gaming #toptalent",
-    likes: 99381,
-    comments: 48313,
-    shares: 13843,
-    liked: false,
-    user: USERS["mariob0y"],
-    sound: new Sound({
-      desc: "mario piano cover",
-      user: USERS["mariob0y"],
-    })
-  }),
-  new Video({
-    src: "portland.mp4",
-    desc: "Thought this might be a bit cute... #lgbt #portland #guitar",
-    likes: 2593381,
-    comments: 14399,
-    shares: 9931,
-    liked: false,
-    user: USERS["j3ss!ca"],
-    sound: new Sound({
-      desc: "she said to me (portland)",
-      user: USERS["j3ss!ca"]
-    })
-  })
-];
-*/

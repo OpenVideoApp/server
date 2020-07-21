@@ -26,11 +26,11 @@ const resolvers: IResolvers = {
     async sound(_: void, args: any) {
       return db.getSound(args.id);
     },
-    async video(_: void, args: any) {
-      return db.getVideo(args.id);
+    async video(_: void, args: any, auth: AuthData) {
+      return db.getVideo(auth, args.id);
     },
-    async comment(_: void, args: any) {
-      return db.getComment(args.id);
+    async comment(_: void, args: any, auth: AuthData) {
+      return db.getComment(auth, args.id);
     },
     async me(_: void, args: any, auth: AuthData) {
       return auth.valid ? db.getUser(auth.username as string) : new APIError("Invalid Login");
