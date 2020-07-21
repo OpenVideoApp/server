@@ -1,5 +1,5 @@
 import neo4j, {Driver, Session} from "neo4j-driver";
-import {v4 as uuidv4} from "uuid";
+import {isUuid, uuid} from "uuidv4";
 import bcrypt = require("bcrypt");
 
 import {APIError, APIResult, unixTime} from "./helpers";
@@ -12,9 +12,9 @@ class Database {
 
   constructor(host?: string, user?: string, pass?: string) {
     this.driver = neo4j.driver(
-      host || "bolt://localhost:8000",
-      neo4j.auth.basic(user || 'neo4j',pass || "password"),
-        {encrypted: true}
+        host || "bolt://localhost:8000",
+        neo4j.auth.basic(user || 'neo4j', pass || "password"),
+        {encrypted: false}
     );
     this.driver.verifyConnectivity().then((serverInfo) => {
       console.info(`Connected to database on '${serverInfo.address}' with version '${serverInfo.version}'`);
@@ -24,7 +24,12 @@ class Database {
   }
 
   async createUser(name: string, password: string, displayName: string, profilePicURL: string): Promise<User | APIError> {
-    let passwordHash = await bcrypt.hash(password, 10);
+    if (name.length < User.MIN_USERNAME_LENGTH) {
+      return new APIError(`Username must be at least ${User.MIN_USERNAME_LENGTH} characters`);
+    } else if (password.length < User.MIN_PASSWORD_LENGTH) {
+      return new APIError(`Password must be at least ${User.MIN_PASSWORD_LENGTH} characters`);
+    }
+
     let session = this.driver.session();
 
     try {
@@ -37,6 +42,7 @@ class Database {
       });
 
       if (result.records.length > 0) return new APIError("User already exists!");
+      let passwordHash = await bcrypt.hash(password, 10);
 
       let user = new User({
         name: name,
@@ -62,6 +68,7 @@ class Database {
   }
 
   async getUser(name: string, existingSession?: Session): Promise<User | APIError> {
+    if (name.length < User.MIN_USERNAME_LENGTH) return new APIError("Invalid Username");
     let session: Session = existingSession || this.driver.session();
     try {
       let result = await session.run(`
@@ -82,8 +89,12 @@ class Database {
   }
 
   async login(username: string, password: string, device: string): Promise<Login | APIError> {
+    if (username.length < User.MIN_USERNAME_LENGTH) return new APIError("Invalid Username");
+    if (password.length < User.MIN_PASSWORD_LENGTH) return new APIError("Invalid Password");
+
     let session = this.driver.session();
     let user = await this.getUser(username, session);
+
     if (user.__typename == "APIError") {
       await session.close();
       return new APIError("Invalid User");
@@ -98,7 +109,7 @@ class Database {
     if (!validPassword) return new APIError("Incorrect Password");
 
     let timestamp = unixTime();
-    let token = uuidv4();
+    let token = uuid();
 
     user.passwordHash = undefined;
 
@@ -127,6 +138,7 @@ class Database {
   }
 
   async validateLogin(username: string, token: string): Promise<boolean> {
+    if (username.length < User.MIN_USERNAME_LENGTH || !isUuid(token)) return false;
     let session = this.driver.session();
     try {
       let result = await session.run(`
@@ -150,7 +162,7 @@ class Database {
     if (!auth.valid) return APIError.Authentication;
 
     let sound = new Sound({
-      id: uuidv4(),
+      id: uuid(),
       createdAt: unixTime(),
       desc: desc
     } as Sound);
@@ -178,6 +190,7 @@ class Database {
   }
 
   async getSound(id: string): Promise<Sound | APIError> {
+    if (!isUuid(id)) return new APIError("Invalid Sound ID");
     let session = this.driver.session();
     try {
       let query = await session.run(`
@@ -204,8 +217,10 @@ class Database {
   }
 
   async createVideo(auth: AuthData, soundId: string, src: string, desc: string): Promise<Video | APIError> {
-    if (!auth.valid) return APIError.Authentication;
+    if (src.length < 1) return new APIError("Invalid Video");
+    if (!isUuid(soundId)) return new APIError("Invalid Sound ID");
 
+    if (!auth.valid) return APIError.Authentication;
     let session = this.driver.session();
 
     try {
@@ -213,7 +228,7 @@ class Database {
       if (sound.__typename == "APIError") return new APIError("Invalid Sound");
 
       let video = new Video({
-        id: uuidv4(),
+        id: uuid(),
         createdAt: unixTime(),
         src: src,
         desc: desc
@@ -244,7 +259,9 @@ class Database {
 
 
   async getVideo(id: string): Promise<Video | APIError> {
+    if (!isUuid(id)) return new APIError("Invalid Video ID");
     let session = this.driver.session();
+
     try {
       let query = await Database.queryVideo(session, "video", {videoId: id});
       await session.close();
@@ -257,7 +274,38 @@ class Database {
     }
   }
 
+  async getVideos(auth: AuthData, count: number): Promise<Video[]> {
+    if (count < 1) return [];
+    if (!auth.valid) return [];
+    let session = this.driver.session();
+
+    try {
+      let query = await Database.queryVideo(session, "video", {
+        username: auth.username,
+        count: count
+      }, [
+        "MATCH", "", "WITH", "OPTIONAL MATCH", "RETURN",
+        "ORDER BY rand() LIMIT $count"
+      ]);
+
+      if (query.records.length == 0) return [];
+
+      let videos: Video[] = [];
+      for (let v = 0; v < query.records.length; v++) {
+        videos.push(Video.fromQuery(query.records[v], "video"));
+      }
+
+      return videos;
+    } catch (error) {
+      console.warn("Failed to get videos:", error);
+      return [];
+    }
+  }
+
   async watchVideo(auth: AuthData, videoId: string, seconds: number): Promise<WatchData | APIError> {
+    if (!isUuid(videoId)) return new APIError("Invalid Video ID");
+    if (seconds < 0) return new APIError("Seconds must be positive");
+
     if (!auth.valid) return APIError.Authentication;
     let session = this.driver.session();
 
@@ -287,6 +335,8 @@ class Database {
   }
 
   async likeVideo(auth: AuthData, videoId: string, remove: boolean = false): Promise<APIResult> {
+    if (!isUuid(videoId)) return new APIError("Invalid Video ID");
+
     if (!auth.valid) return APIError.Authentication;
     let session = this.driver.session();
 
@@ -316,13 +366,16 @@ class Database {
   }
 
   async addComment(auth: AuthData, videoId: string, body: string): Promise<VideoComment | APIError> {
+    if (!isUuid(videoId)) return new APIError("Invalid Video ID");
+    if (body.length < 1) return new APIError("Comment cannot be empty");
+
     if (!auth.valid) return APIError.Authentication;
     let session = this.driver.session();
 
     try {
       let query = await Database.queryVideo(session, "commentVideo", {
         comment: {
-          id: uuidv4(),
+          id: uuid(),
           createdAt: unixTime(),
           body: body
         },
@@ -348,7 +401,9 @@ class Database {
   }
 
   async getComment(id: string): Promise<VideoComment | APIError> {
+    if (!isUuid(id)) return new APIError("Invalid Comment ID");
     let session = this.driver.session();
+
     try {
       let query = await Database.queryVideo(session, "commentVideo", {
         commentId: id
@@ -373,7 +428,7 @@ class Database {
 
   private static async queryVideo(session: Session, name: string, props: any, query: string[] = [], matchVideoId = true) {
     return session.run(`
-      ${query.length > 0 ? query[0] : "MATCH"} (${name}SoundUser: User)-[:RECORDED]->(${name}Sound: Sound)<-[:USES]-(${name}${matchVideoId ? ": Video": ""}),
+      ${query.length > 0 ? query[0] : "MATCH"} (${name}SoundUser: User)-[:RECORDED]->(${name}Sound: Sound)<-[:USES]-(${name}${matchVideoId ? ": Video" : ""}),
       (${name})<-[:FILMED]-(${name}User: User)
       ${query.length > 1 ? query[1] : `WHERE ${name}.id = $${name}Id`}
       ${query.length > 2 ? query[2] : "WITH"} ${name}, ${name}User, ${name}Sound, ${name}SoundUser
@@ -382,14 +437,15 @@ class Database {
       ${query.length > 4 ? query[4] : "RETURN"} ${name}, ${name}User, ${name}Sound, ${name}SoundUser, 
       COUNT(DISTINCT ${name}Watch) AS ${name}Views, COUNT(DISTINCT ${name}Like) AS ${name}Likes,
       COUNT(DISTINCT ${name}Comment) AS ${name}Comments
+      ${query.length > 5 ? query[5] : ""}
     `, props);
   }
 }
 
 const db = new Database(
-  process.env.NEO_HOST,
-  process.env.NEO_USER,
-  process.env.NEO_PASS
+    process.env.NEO_HOST,
+    process.env.NEO_USER,
+    process.env.NEO_PASS
 );
 
 export default db;

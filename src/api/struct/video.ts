@@ -1,6 +1,7 @@
 import {User} from "./user";
 import {Sound} from "./sound";
 import neo4j from "neo4j-driver";
+import {processInternalURL} from "../helpers";
 
 export class Video {
   id: string;
@@ -18,7 +19,7 @@ export class Video {
   constructor(video: Video) {
     this.id = video.id;
     this.createdAt = video.createdAt;
-    this.src = video.src;
+    this.src = processInternalURL(video.src);
     this.desc = video.desc;
     this.views = video.views;
     this.likes = video.likes;
@@ -85,7 +86,7 @@ export class VideoComment {
 /*
 export const VIDEOS: Video[] = [
   new Video({
-    src: "https://open-video.s3-ap-southeast-2.amazonaws.com/cah-ad.mp4",
+    src: "cah-ad.mp4",
     desc: "I made this site so that you can play #cardsagainsthumanity despite being in #quarantine! Link in bio.",
     likes: 168302,
     comments: 3048,
@@ -98,7 +99,7 @@ export const VIDEOS: Video[] = [
     })
   }),
   new Video({
-    src: "https://open-video.s3-ap-southeast-2.amazonaws.com/dorime.mp4",
+    src: "dorime.mp4",
     desc: "It haunts my #dreams",
     likes: 2843967,
     comments: 28483,
@@ -111,7 +112,7 @@ export const VIDEOS: Video[] = [
     })
   }),
   new Video({
-    src: "https://open-video.s3-ap-southeast-2.amazonaws.com/mario_piano.mp4",
+    src: "mario_piano.mp4",
     desc: "My #piano cover of #mario - #gaming #toptalent",
     likes: 99381,
     comments: 48313,
@@ -124,7 +125,7 @@ export const VIDEOS: Video[] = [
     })
   }),
   new Video({
-    src: "https://open-video.s3-ap-southeast-2.amazonaws.com/portland.mp4",
+    src: "portland.mp4",
     desc: "Thought this might be a bit cute... #lgbt #portland #guitar",
     likes: 2593381,
     comments: 14399,

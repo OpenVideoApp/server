@@ -1,3 +1,5 @@
+import {processInternalURL} from "../helpers";
+
 export class AuthData {
   valid: boolean;
   username?: string;
@@ -36,13 +38,16 @@ export class User {
   displayName?: string;
   profilePicURL?: string;
 
+  static MIN_USERNAME_LENGTH = 3;
+  static MIN_PASSWORD_LENGTH = 8;
+
   constructor(user: User) {
     this.name = user.name;
     this.createdAt = user.createdAt;
     this.passwordHash = user.passwordHash;
     this.token = user.token;
     this.displayName = user.displayName;
-    this.profilePicURL = user.profilePicURL;
+    if (user.profilePicURL) this.profilePicURL = processInternalURL(user.profilePicURL);
   }
 
   static fromQuery(res: Record<string, any>, prop: string): User {

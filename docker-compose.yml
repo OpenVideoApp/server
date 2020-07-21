@@ -33,7 +33,6 @@ services:
     restart: unless-stopped
     env_file: ./dev/.env
     expose:
-      - "3000"
       - "4000"
 
   nginx:

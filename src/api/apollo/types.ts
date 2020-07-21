@@ -68,6 +68,9 @@ const types = `
     sound(id: String!): SoundInfo!
     video(id: String!): VideoInfo!
     comment(id: String!): CommentInfo!
+    
+    me: UserInfo!
+    videos(count: Int = 1): [Video!]
   }
   
   type Mutation {

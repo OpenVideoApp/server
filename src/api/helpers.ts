@@ -32,3 +32,10 @@ export class APIError extends APIResult{
 export function unixTime() {
   return Math.round((new Date()).getTime() / 1000);
 }
+
+const S3_URL = "https://raw.openvideo.ml/";
+
+export function processInternalURL(url: string): string {
+  if (url.includes(S3_URL)) return url;
+  return S3_URL + url;
+}

@@ -1,6 +1,7 @@
 import { IResolvers } from 'graphql-tools';
 import db from "../db";
 import {AuthData} from "../struct/user";
+import {APIError, APIResult} from "../helpers";
 
 function resolveType(expected: String) {
   return {
@@ -30,6 +31,12 @@ const resolvers: IResolvers = {
     },
     async comment(_: void, args: any) {
       return db.getComment(args.id);
+    },
+    async me(_: void, args: any, auth: AuthData) {
+      return auth.valid ? db.getUser(auth.username as string) : new APIError("Invalid Login");
+    },
+    async videos(_: void, args: any, auth: AuthData) {
+      return db.getVideos(auth, args.count);
     }
   },
   Mutation: {
