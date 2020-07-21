@@ -77,8 +77,8 @@ export class VideoComment {
 
   static fromQuery(res: Record<string, any>, prop: string): VideoComment {
     let comment = new VideoComment(res.get(prop).properties);
-    comment.likes = neo4j.int(res.get(prop + "Likes")).toInt();
     comment.user = User.fromQuery(res, prop + "User");
+    if (res["keys"].includes(prop + "Likes")) comment.likes = neo4j.int(res.get(prop + "Likes")).toInt();
     if (res["keys"].includes(prop + "Liked")) comment.liked = res.get(prop + "Liked");
     return comment;
   }
