@@ -69,6 +69,7 @@ class Database {
     }
   }
 
+  // TODO: get likes when getting users elsewhere ?
   async getUser(name: string, existingSession?: Session): Promise<User | APIError> {
     if (name.length < User.MIN_USERNAME_LENGTH) return new APIError("Invalid Username");
     let session: Session = existingSession || this.driver.session();
@@ -76,13 +77,15 @@ class Database {
       let result = await session.run(`
         MATCH (user:User)
         WHERE user.name = $name
-        RETURN user
+        OPTIONAL MATCH (user)-[:FILMED]-(:Video)<-[userVideoLiked:LIKED]-(:User),
+        (user)-[:COMMENTED]-(:Comment)<-[userCommentLiked:LIKED]-(:User)
+        RETURN user, (COUNT(DISTINCT userVideoLiked) + COUNT(DISTINCT userCommentLiked)) AS userLikes
       `, {
         name: name
       });
       if (!existingSession) await session.close();
       if (result.records.length == 0) return new APIError("Missing User");
-      return new User(result.records[0].get("user").properties);
+      return User.fromQuery(result.records[0], "user");
     } catch (error) {
       console.info("Error getting user:", error);
       if (!existingSession) await session.close();
@@ -112,8 +115,6 @@ class Database {
 
     let timestamp = unixTime();
     let token = uuid();
-
-    user.passwordHash = undefined;
 
     try {
       let results = await session.run(`

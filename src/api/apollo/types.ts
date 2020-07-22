@@ -11,9 +11,10 @@ const types = `
   
   type User {
     name: String!
-    createdAt: Int
+    createdAt: Int!
     displayName: String
     profilePicURL: String
+    likes: Int
   }
   
   type Login {
