@@ -44,10 +44,10 @@ export function processInternalURL(url: string): string {
 
 export function getVarFromQuery(res: Record<string, any>, prop: string, field: string, fallback: any = undefined) {
   if (res["keys"].includes(prop + field)) return res.get(prop + field);
-  return fallback;
+  else return fallback;
 }
 
 export function getIntFromQuery(res: Record<string, any>, prop: string, field: string) {
   if (res["keys"].includes(prop + field)) return neo4j.int(res.get(prop + field)).toInt();
-  return 0;
+  else return 0;
 }

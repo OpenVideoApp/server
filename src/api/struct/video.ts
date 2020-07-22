@@ -36,7 +36,7 @@ export class Video {
     video.views = getIntFromQuery(res, prop, "Views");
     video.likes = getIntFromQuery(res, prop, "Likes");
     video.comments = getIntFromQuery(res, prop, "Comments");
-    res.liked = getVarFromQuery(res, prop, "Liked", false);
+    video.liked = getVarFromQuery(res, prop, "Liked", false);
     return video;
   }
 

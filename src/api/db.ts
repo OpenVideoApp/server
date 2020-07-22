@@ -6,7 +6,6 @@ import {APIError, APIResult, getVarFromQuery, unixTime} from "./helpers";
 import {AuthData, Login, User} from "./struct/user";
 import {Sound} from "./struct/sound";
 import {Video, VideoComment, WatchData} from "./struct/video";
-import {bool} from "aws-sdk/clients/signer";
 
 class Database {
   driver: Driver;
@@ -209,21 +208,20 @@ class Database {
 
     try {
       let query = await session.run(`
-        MATCH (them:User)${followers ? "-" : "<-"}[:FOLLOWS]${followers ? "->" : "-"}(me:User {name: $username})
-        RETURN them AS user, EXISTS((them)${followers ? "<-" : "-"}[:FOLLOWS]${followers ? "-" : "->"}(me)) AS userFollowsBack
+        MATCH (them:User)${followers ? "-" : "<-"}[:FOLLOWS]${followers ? "->" : "-"}(:User {name: $username})
+        ${auth.valid ? "MATCH (me: User {name: $authenticatedUser})" : ""}
+        RETURN them AS user${auth.valid ? `,
+        EXISTS((them)-[:FOLLOWS]->(me)) AS userFollowsYou,
+        EXISTS((me)-[:FOLLOWS]->(them)) AS userFollowedByYou
+        ` : ""}
       `, {
+        "authenticatedUser": auth.valid ? auth.username : undefined,
         "username": username
       });
 
       let users: User[] = [];
       for (let u = 0; u < query.records.length; u++) {
-        let user = User.fromQuery(query.records[u], "user");
-        let followsBack = getVarFromQuery(query.records[u], "user", "FollowsBack", false);
-
-        user.followsYou = followers ? true : followsBack;
-        user.followedByYou = followers ? followsBack : true;
-
-        users.push(user);
+        users.push(User.fromQuery(query.records[u], "user"));
       }
       return users;
     } catch (error) {
