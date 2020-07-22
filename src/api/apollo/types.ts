@@ -78,7 +78,7 @@ const types = `
   }
   
   type Mutation {
-    createUser(name: String!, password: String!, displayName: String, profilePicURL: String): UserInfo!
+    createUser(name: String!, password: String!, displayName: String): UserInfo!
     login(username: String!, password: String!, device: String!): LoginInfo!
     
     createSound(desc: String!): SoundInfo!

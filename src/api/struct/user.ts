@@ -1,4 +1,6 @@
 import {processInternalURL} from "../helpers";
+import bucket from "../../aws";
+import jdenticon from "jdenticon";
 
 export class AuthData {
   valid: boolean;
@@ -48,6 +50,12 @@ export class User {
     this.token = user.token;
     this.displayName = user.displayName;
     if (user.profilePicURL) this.profilePicURL = processInternalURL(user.profilePicURL);
+  }
+
+  async generateIcon(): Promise<boolean> {
+    let icon =  jdenticon.toPng(this.name, 200);
+    this.profilePicURL = this.name + ".jpg";
+    return bucket.upload(icon, this.profilePicURL);
   }
 
   static fromQuery(res: Record<string, any>, prop: string): User {

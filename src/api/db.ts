@@ -23,7 +23,7 @@ class Database {
     });
   }
 
-  async createUser(name: string, password: string, displayName: string, profilePicURL: string): Promise<User | APIError> {
+  async createUser(name: string, password: string, displayName: string): Promise<User | APIError> {
     if (name.length < User.MIN_USERNAME_LENGTH) {
       return new APIError(`Username must be at least ${User.MIN_USERNAME_LENGTH} characters`);
     } else if (password.length < User.MIN_PASSWORD_LENGTH) {
@@ -48,9 +48,11 @@ class Database {
         name: name,
         createdAt: unixTime(),
         passwordHash: passwordHash,
-        displayName: displayName,
-        profilePicURL: profilePicURL
+        displayName: displayName
       } as User);
+
+      let setIcon = await user.generateIcon();
+      if (!setIcon) console.warn(`Failed to generate icon for user '${name}'`);
 
       await session.run(`
         CREATE (a: User $user)

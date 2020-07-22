@@ -47,7 +47,7 @@ const resolvers: IResolvers = {
       return db.login(args.username, args.password, args.device);
     },
     async createUser(_: void, args: any) {
-      return db.createUser(args.name, args.password, args.displayName, args.profilePicURL);
+      return db.createUser(args.name, args.password, args.displayName);
     },
     async createSound(_: void, args: any, auth: AuthData) {
       return db.createSound(auth, args.desc);

@@ -19,7 +19,8 @@
     "apollo-server": "^2.16.0",
     "neo4j-driver": "^4.1.0",
     "bcrypt": "^5.0.0",
-    "uuidv4": "^6.2.0"
+    "uuidv4": "^6.2.0",
+    "jdenticon": "^2.2.0"
   },
   "repository": {
     "type": "git",
