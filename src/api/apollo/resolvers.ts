@@ -20,8 +20,8 @@ const resolvers: IResolvers = {
   WatchInfo: resolveType("WatchData"),
   CommentInfo: resolveType("Comment"),
   Query: {
-    async user(_: void, args: any) {
-      return db.getUser(args.name);
+    async user(_: void, args: any, auth: AuthData) {
+      return db.getUser(auth, args.name);
     },
     async following(_: void, args: any, auth: AuthData) {
       return db.getUserList(auth, args.name);
@@ -42,7 +42,7 @@ const resolvers: IResolvers = {
       return db.getComments(auth, args.videoId);
     },
     async me(_: void, args: any, auth: AuthData) {
-      return auth.valid ? db.getUser(auth.username as string) : new APIError("Invalid Login");
+      return auth.valid ? db.getUser(auth, auth.username as string) : new APIError("Invalid Login");
     },
     async videos(_: void, args: any, auth: AuthData) {
       return db.getVideos(auth, args.count);

@@ -1,4 +1,4 @@
-import {getIntFromQuery, processInternalURL} from "../helpers";
+import {getIntFromQuery, getVarFromQuery, processInternalURL} from "../helpers";
 import bucket from "../../aws";
 import jdenticon from "jdenticon";
 
@@ -42,6 +42,8 @@ export class User {
   following?: number;
   followers?: number;
   likes?: number;
+  followsYou?: boolean;
+  followedByYou?: boolean;
 
   static MIN_USERNAME_LENGTH = 3;
   static MIN_PASSWORD_LENGTH = 8;
@@ -55,6 +57,8 @@ export class User {
     this.following = user.following || 0;
     this.followers = user.followers || 0;
     this.likes = user.likes || 0;
+    this.followsYou = user.followsYou || false;
+    this.followedByYou = user.followedByYou || false;
     if (user.profilePicURL) this.profilePicURL = processInternalURL(user.profilePicURL);
   }
 
@@ -69,6 +73,8 @@ export class User {
     user.following = getIntFromQuery(res, prop, "Following");
     user.followers = getIntFromQuery(res, prop, "Followers");
     user.likes = getIntFromQuery(res, prop, "Likes");
+    user.followsYou = getVarFromQuery(res, prop, "FollowsYou", false);
+    user.followedByYou = getVarFromQuery(res, prop, "FollowedByYou", false);
     return user;
   }
 

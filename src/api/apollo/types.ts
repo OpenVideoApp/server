@@ -17,6 +17,8 @@ const types = `
     following: Int
     followers: Int
     likes: Int
+    followsYou: Boolean
+    followedByYou: Boolean
   }
   
   type Login {

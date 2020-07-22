@@ -2,7 +2,7 @@ import neo4j, {Driver, Session} from "neo4j-driver";
 import {isUuid, uuid} from "uuidv4";
 import bcrypt = require("bcrypt");
 
-import {APIError, APIResult, unixTime} from "./helpers";
+import {APIError, APIResult, getVarFromQuery, unixTime} from "./helpers";
 import {AuthData, Login, User} from "./struct/user";
 import {Sound} from "./struct/sound";
 import {Video, VideoComment, WatchData} from "./struct/video";
@@ -71,21 +71,24 @@ class Database {
   }
 
   // TODO: get likes when getting users elsewhere ?
-  async getUser(name: string, existingSession?: Session): Promise<User | APIError> {
+  async getUser(auth: AuthData, name: string, existingSession?: Session): Promise<User | APIError> {
     if (name.length < User.MIN_USERNAME_LENGTH) return new APIError("Invalid Username");
     let session: Session = existingSession || this.driver.session();
     try {
       let result = await session.run(`
-        MATCH (user:User)
-        WHERE user.name = $name
+        MATCH (user:User) WHERE user.name = $name
+        ${auth.valid ? "MATCH (me:User) WHERE me.name = $authenticatedUser" : ""}
         OPTIONAL MATCH (user)-[:FILMED]-(:Video)<-[userVideoLiked:LIKED]-(:User)
         OPTIONAL MATCH (user)-[:COMMENTED]-(:Comment)<-[userCommentLiked:LIKED]-(:User)
         OPTIONAL MATCH (user)-[:FOLLOWS]->(userFollows:User)
         OPTIONAL MATCH (userFollower:User)-[:FOLLOWS]->(user)
         RETURN user, (COUNT(DISTINCT userVideoLiked) + COUNT(DISTINCT userCommentLiked)) AS userLikes,
-        COUNT(DISTINCT userFollows) AS userFollowing, COUNT(DISTINCT userFollower) AS userFollowers
+        COUNT(DISTINCT userFollows) AS userFollowing, COUNT(DISTINCT userFollower) AS userFollowers${auth.valid ? `,
+        EXISTS((me)-[:FOLLOWS]->(user)) AS userFollowedByYou, EXISTS((user)-[:FOLLOWS]->(me)) AS userFollowsYou
+        ` : ""}
       `, {
-        name: name
+        name: name,
+        authenticatedUser: auth.valid ? auth.username : undefined
       });
       if (!existingSession) await session.close();
       if (result.records.length == 0) return new APIError("Missing User");
@@ -102,7 +105,7 @@ class Database {
     if (password.length < User.MIN_PASSWORD_LENGTH) return new APIError("Invalid Password");
 
     let session = this.driver.session();
-    let user = await this.getUser(username, session);
+    let user = await this.getUser(AuthData.Invalid, username, session);
 
     if (user.__typename == "APIError") {
       await session.close();
@@ -206,15 +209,21 @@ class Database {
 
     try {
       let query = await session.run(`
-        MATCH (user:User)${followers ? "-" : "<-"}[:FOLLOWS]${followers ? "->" : "-"}(:User {name: $username})
-        RETURN user;
+        MATCH (them:User)${followers ? "-" : "<-"}[:FOLLOWS]${followers ? "->" : "-"}(me:User {name: $username})
+        RETURN them AS user, EXISTS((them)${followers ? "<-" : "-"}[:FOLLOWS]${followers ? "-" : "->"}(me)) AS userFollowsBack
       `, {
         "username": username
       });
 
       let users: User[] = [];
-      for (let user = 0; user < query.records.length; user++) {
-        users.push(User.fromQuery(query.records[user], "user"));
+      for (let u = 0; u < query.records.length; u++) {
+        let user = User.fromQuery(query.records[u], "user");
+        let followsBack = getVarFromQuery(query.records[u], "user", "FollowsBack", false);
+
+        user.followsYou = followers ? true : followsBack;
+        user.followedByYou = followers ? followsBack : true;
+
+        users.push(user);
       }
       return users;
     } catch (error) {
@@ -561,7 +570,7 @@ class Database {
   }
 
   private static async queryVideo(session: Session, name: string, props: any, query: string[] = [], matchVideoId = true) {
-    return session.run( `
+    return session.run(`
       ${query.length > 0 ? query[0] : "MATCH"} (${name}SoundUser: User)-[:RECORDED]->(${name}Sound: Sound)<-[:USES]-(${name}${matchVideoId ? ": Video" : ""}),
       (${name})<-[:FILMED]-(${name}User: User)
       ${query.length > 1 ? query[1] : `WHERE ${name}.id = $${name}Id`}
