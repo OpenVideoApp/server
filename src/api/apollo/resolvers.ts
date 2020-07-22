@@ -23,6 +23,12 @@ const resolvers: IResolvers = {
     async user(_: void, args: any) {
       return db.getUser(args.name);
     },
+    async following(_: void, args: any, auth: AuthData) {
+      return db.getUserList(auth, args.name);
+    },
+    async followers(_: void, args: any, auth: AuthData) {
+      return db.getUserList(auth, args.name, true);
+    },
     async sound(_: void, args: any) {
       return db.getSound(args.id);
     },
@@ -48,6 +54,9 @@ const resolvers: IResolvers = {
     },
     async createUser(_: void, args: any) {
       return db.createUser(args.name, args.password, args.displayName);
+    },
+    async followUser(_: void, args: any, auth: AuthData) {
+      return db.followUser(auth, args.username, args.remove);
     },
     async createSound(_: void, args: any, auth: AuthData) {
       return db.createSound(auth, args.desc);

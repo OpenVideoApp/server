@@ -14,6 +14,8 @@ const types = `
     createdAt: Int!
     displayName: String
     profilePicURL: String
+    following: Int
+    followers: Int
     likes: Int
   }
   
@@ -68,6 +70,9 @@ const types = `
   
   type Query {
     user(name: String!): UserInfo!
+    following(name: String!): [User!]
+    followers(name: String!): [User!]
+    
     sound(id: String!): SoundInfo!
     video(id: String!): VideoInfo!
     
@@ -81,6 +86,8 @@ const types = `
   type Mutation {
     createUser(name: String!, password: String!, displayName: String): UserInfo!
     login(username: String!, password: String!, device: String!): LoginInfo!
+    
+    followUser(username: String!, remove: Boolean = false): APIResponse!
     
     createSound(desc: String!): SoundInfo!
     createVideo(soundId: String!, src: String!, desc: String!): VideoInfo!

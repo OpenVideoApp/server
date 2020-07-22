@@ -6,6 +6,7 @@ import {APIError, APIResult, unixTime} from "./helpers";
 import {AuthData, Login, User} from "./struct/user";
 import {Sound} from "./struct/sound";
 import {Video, VideoComment, WatchData} from "./struct/video";
+import {bool} from "aws-sdk/clients/signer";
 
 class Database {
   driver: Driver;
@@ -77,9 +78,12 @@ class Database {
       let result = await session.run(`
         MATCH (user:User)
         WHERE user.name = $name
-        OPTIONAL MATCH (user)-[:FILMED]-(:Video)<-[userVideoLiked:LIKED]-(:User),
-        (user)-[:COMMENTED]-(:Comment)<-[userCommentLiked:LIKED]-(:User)
-        RETURN user, (COUNT(DISTINCT userVideoLiked) + COUNT(DISTINCT userCommentLiked)) AS userLikes
+        OPTIONAL MATCH (user)-[:FILMED]-(:Video)<-[userVideoLiked:LIKED]-(:User)
+        OPTIONAL MATCH (user)-[:COMMENTED]-(:Comment)<-[userCommentLiked:LIKED]-(:User)
+        OPTIONAL MATCH (user)-[:FOLLOWS]->(userFollows:User)
+        OPTIONAL MATCH (userFollower:User)-[:FOLLOWS]->(user)
+        RETURN user, (COUNT(DISTINCT userVideoLiked) + COUNT(DISTINCT userCommentLiked)) AS userLikes,
+        COUNT(DISTINCT userFollows) AS userFollowing, COUNT(DISTINCT userFollower) AS userFollowers
       `, {
         name: name
       });
@@ -158,6 +162,64 @@ class Database {
       console.info("Error checking token:", error);
       await session.close();
       return false;
+    }
+  }
+
+  async followUser(auth: AuthData, username: string, remove: boolean): Promise<APIResult> {
+    if (!auth.valid) return APIError.Authentication;
+    if (username.length < User.MIN_USERNAME_LENGTH) return new APIError("Invalid Username");
+    if (username == auth.username) return new APIError(`You can't ${remove ? "un" : ""}follow yourself!`);
+
+    let session = this.driver.session();
+    try {
+      let queryStr;
+      if (remove) queryStr = `
+        MATCH (:User {name: $authenticatedUser})-[f:FOLLOWS]->(them:User {name: $username})
+        DETACH DELETE f
+        RETURN them.name;
+      `; else queryStr = `
+        MATCH (me:User {name: $authenticatedUser}), (them:User {name: $username})
+        MERGE (me)-[f:FOLLOWS]->(them)
+        ON CREATE SET f.since = timestamp()
+        RETURN f;
+      `;
+      let query = await session.run(queryStr, {
+        "authenticatedUser": auth.username,
+        "username": username
+      });
+      if (query.records.length == 0) {
+        if (remove) return APIError.Neutral;
+        else return new APIError("User does not exist");
+      }
+      await session.close();
+      return APIResult.Success;
+    } catch (error) {
+      console.warn(`Failed to follow '${username}':`, error);
+      await session.close();
+      return APIError.Internal;
+    }
+  }
+
+  async getUserList(auth: AuthData, username: string, followers: boolean = false): Promise<User[]> {
+    if (username.length < User.MIN_USERNAME_LENGTH) return [];
+    let session = this.driver.session();
+
+    try {
+      let query = await session.run(`
+        MATCH (user:User)${followers ? "-" : "<-"}[:FOLLOWS]${followers ? "->" : "-"}(:User {name: $username})
+        RETURN user;
+      `, {
+        "username": username
+      });
+
+      let users: User[] = [];
+      for (let user = 0; user < query.records.length; user++) {
+        users.push(User.fromQuery(query.records[user], "user"));
+      }
+      return users;
+    } catch (error) {
+      console.warn(`Failed to get user list for '${username}':`, error);
+      return [];
     }
   }
 

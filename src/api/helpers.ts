@@ -1,3 +1,5 @@
+import neo4j from "neo4j-driver";
+
 export class APIResult {
   success: boolean;
 
@@ -38,4 +40,14 @@ const S3_URL = "https://raw.openvideo.ml/";
 export function processInternalURL(url: string): string {
   if (url.includes(S3_URL)) return url;
   return S3_URL + url;
+}
+
+export function getVarFromQuery(res: Record<string, any>, prop: string, field: string, fallback: any = undefined) {
+  if (res["keys"].includes(prop + field)) return res.get(prop + field);
+  return fallback;
+}
+
+export function getIntFromQuery(res: Record<string, any>, prop: string, field: string) {
+  if (res["keys"].includes(prop + field)) return neo4j.int(res.get(prop + field)).toInt();
+  return 0;
 }

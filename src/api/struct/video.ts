@@ -1,7 +1,6 @@
 import {User} from "./user";
 import {Sound} from "./sound";
-import neo4j from "neo4j-driver";
-import {processInternalURL} from "../helpers";
+import {getIntFromQuery, getVarFromQuery, processInternalURL} from "../helpers";
 
 export class Video {
   id: string;
@@ -34,10 +33,10 @@ export class Video {
     let video = new Video(res.get(prop).properties);
     video.user = User.fromQuery(res, prop + "User");
     video.sound = Sound.fromQuery(res, prop + "Sound");
-    video.views = neo4j.int(res.get(prop + "Views")).toInt();
-    video.likes = neo4j.int(res.get(prop + "Likes")).toInt();
-    video.comments = neo4j.int(res.get(prop + "Comments")).toInt();
-    if (res["keys"].includes(prop + "Liked")) video.liked = res.get(prop + "Liked");
+    video.views = getIntFromQuery(res, prop, "Views");
+    video.likes = getIntFromQuery(res, prop, "Likes");
+    video.comments = getIntFromQuery(res, prop, "Comments");
+    res.liked = getVarFromQuery(res, prop, "Liked", false);
     return video;
   }
 
@@ -78,8 +77,8 @@ export class VideoComment {
   static fromQuery(res: Record<string, any>, prop: string): VideoComment {
     let comment = new VideoComment(res.get(prop).properties);
     comment.user = User.fromQuery(res, prop + "User");
-    if (res["keys"].includes(prop + "Likes")) comment.likes = neo4j.int(res.get(prop + "Likes")).toInt();
-    if (res["keys"].includes(prop + "Liked")) comment.liked = res.get(prop + "Liked");
+    comment.likes = getIntFromQuery(res, prop, "Likes");
+    comment.liked = getVarFromQuery(res, prop, "Liked", false);
     return comment;
   }
 

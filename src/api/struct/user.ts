@@ -1,7 +1,6 @@
-import {processInternalURL} from "../helpers";
+import {getIntFromQuery, processInternalURL} from "../helpers";
 import bucket from "../../aws";
 import jdenticon from "jdenticon";
-import neo4j from "neo4j-driver";
 
 export class AuthData {
   valid: boolean;
@@ -40,6 +39,8 @@ export class User {
   token?: string;
   displayName?: string;
   profilePicURL?: string;
+  following?: number;
+  followers?: number;
   likes?: number;
 
   static MIN_USERNAME_LENGTH = 3;
@@ -51,6 +52,8 @@ export class User {
     this.passwordHash = user.passwordHash;
     this.token = user.token;
     this.displayName = user.displayName;
+    this.following = user.following || 0;
+    this.followers = user.followers || 0;
     this.likes = user.likes || 0;
     if (user.profilePicURL) this.profilePicURL = processInternalURL(user.profilePicURL);
   }
@@ -63,7 +66,9 @@ export class User {
 
   static fromQuery(res: Record<string, any>, prop: string): User {
     let user = new User(res.get(prop).properties);
-    if (res["keys"].includes(prop + "Likes")) user.likes = neo4j.int(res.get(prop + "Likes")).toInt();
+    user.following = getIntFromQuery(res, prop, "Following");
+    user.followers = getIntFromQuery(res, prop, "Followers");
+    user.likes = getIntFromQuery(res, prop, "Likes");
     return user;
   }
 
