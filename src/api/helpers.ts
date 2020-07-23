@@ -35,11 +35,11 @@ export function unixTime() {
   return Math.round((new Date()).getTime() / 1000);
 }
 
-const S3_URL = "https://raw.openvideo.ml/";
+const S3_URL = "https://raw.openvideo.ml";
 
-export function processInternalURL(url: string): string {
+export function processInternalURL(folder: string, url: string): string {
   if (url.includes(S3_URL)) return url;
-  return S3_URL + url;
+  return S3_URL + "/" + folder + "/" + url;
 }
 
 export function getVarFromQuery(res: Record<string, any>, prop: string, field: string, fallback: any = undefined) {
@@ -50,4 +50,9 @@ export function getVarFromQuery(res: Record<string, any>, prop: string, field: s
 export function getIntFromQuery(res: Record<string, any>, prop: string, field: string) {
   if (res["keys"].includes(prop + field)) return neo4j.int(res.get(prop + field)).toInt();
   else return 0;
+}
+
+export function getNeo4JInt(value: any) {
+  if (neo4j.isInt(value)) return neo4j.int(value).toInt();
+  return value;
 }

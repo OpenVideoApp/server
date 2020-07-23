@@ -1,6 +1,6 @@
 import {User} from "./user";
 import {Sound} from "./sound";
-import {getIntFromQuery, getVarFromQuery, processInternalURL} from "../helpers";
+import {getNeo4JInt, getVarFromQuery, processInternalURL} from "../helpers";
 
 export class Video {
   id: string;
@@ -11,19 +11,19 @@ export class Video {
   likes: number;
   shares?: number;
   comments: number;
-  liked: boolean;
+  liked?: boolean;
   user?: User;
   sound?: Sound;
 
   constructor(video: Video) {
     this.id = video.id;
-    this.createdAt = video.createdAt;
-    this.src = processInternalURL(video.src);
+    this.createdAt = getNeo4JInt(video.createdAt);
+    this.src = processInternalURL("video", video.id + ".mp4");
     this.desc = video.desc;
-    this.views = video.views;
-    this.likes = video.likes;
-    this.shares = video.shares;
-    this.comments = video.comments;
+    this.views = video.views || 0;
+    this.likes = video.likes || 0;
+    this.shares = video.shares || 0;
+    this.comments = video.comments || 0;
     this.liked = video.liked || false;
     this.user = video.user;
     this.sound = video.sound;
@@ -31,11 +31,11 @@ export class Video {
 
   static fromQuery(res: Record<string, any>, prop: string): Video {
     let video = new Video(res.get(prop).properties);
+    video.views = getNeo4JInt(video.views);
+    video.likes = getNeo4JInt(video.likes);
+    video.comments = getNeo4JInt(video.comments);
     video.user = User.fromQuery(res, prop + "User");
     video.sound = Sound.fromQuery(res, prop + "Sound");
-    video.views = getIntFromQuery(res, prop, "Views");
-    video.likes = getIntFromQuery(res, prop, "Likes");
-    video.comments = getIntFromQuery(res, prop, "Comments");
     video.liked = getVarFromQuery(res, prop, "Liked", false);
     return video;
   }
@@ -63,13 +63,13 @@ export class VideoComment {
   body: string;
   likes: number;
   user?: User;
-  liked: boolean;
+  liked?: boolean;
 
   constructor(comment: VideoComment) {
     this.id = comment.id;
-    this.createdAt = comment.createdAt;
+    this.createdAt = getNeo4JInt(comment.createdAt);
     this.body = comment.body;
-    this.likes = comment.likes;
+    this.likes = getNeo4JInt(comment.likes) || 0;
     this.user = comment.user;
     this.liked = comment.liked || false;
   }
@@ -77,7 +77,6 @@ export class VideoComment {
   static fromQuery(res: Record<string, any>, prop: string): VideoComment {
     let comment = new VideoComment(res.get(prop).properties);
     comment.user = User.fromQuery(res, prop + "User");
-    comment.likes = getIntFromQuery(res, prop, "Likes");
     comment.liked = getVarFromQuery(res, prop, "Liked", false);
     return comment;
   }

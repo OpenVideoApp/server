@@ -2,7 +2,7 @@ import neo4j, {Driver, Session} from "neo4j-driver";
 import {isUuid, uuid} from "uuidv4";
 import bcrypt = require("bcrypt");
 
-import {APIError, APIResult, getVarFromQuery, unixTime} from "./helpers";
+import {APIError, APIResult, unixTime} from "./helpers";
 import {AuthData, Login, User} from "./struct/user";
 import {Sound} from "./struct/sound";
 import {Video, VideoComment, WatchData} from "./struct/video";
@@ -44,24 +44,29 @@ class Database {
       if (result.records.length > 0) return new APIError("User already exists!");
       let passwordHash = await bcrypt.hash(password, 10);
 
-      let user = new User({
-        name: name,
-        createdAt: unixTime(),
-        passwordHash: passwordHash,
-        displayName: displayName
-      } as User);
+      let profilePicURL = await User.generateIcon(name);
+      if (!profilePicURL) console.warn(`Failed to generate icon for user '${name}'`);
 
-      let setIcon = await user.generateIcon();
-      if (!setIcon) console.warn(`Failed to generate icon for user '${name}'`);
-
-      await session.run(`
-        CREATE (a: User $user)
-        RETURN a
+      let query = await session.run(`
+        CREATE (user:User {
+          name: $name,
+          createdAt: timestamp(),
+          passwordHash: $passwordHash,
+          displayName: $displayName,
+          profileBio: "", profileLink: "",
+          profilePicURL: $profilePicURL,
+          views: 0, likes: 0,
+          following: 0, followers: 0
+        })
+        RETURN user
       `, {
-        user: user
+        name: name,
+        passwordHash: passwordHash,
+        displayName: displayName,
+        profilePicURL: profilePicURL
       });
       await session.close();
-      return user;
+      return User.fromQuery(query.records[0], "user");
     } catch (error) {
       console.info("Error creating user:", error);
       await session.close();
@@ -69,7 +74,6 @@ class Database {
     }
   }
 
-  // TODO: get likes when getting users elsewhere ?
   async getUser(auth: AuthData, name: string, existingSession?: Session): Promise<User | APIError> {
     if (name.length < User.MIN_USERNAME_LENGTH) return new APIError("Invalid Username");
     let session: Session = existingSession || this.driver.session();
@@ -77,13 +81,9 @@ class Database {
       let result = await session.run(`
         MATCH (user:User) WHERE user.name = $name
         ${auth.valid ? "MATCH (me:User) WHERE me.name = $authenticatedUser" : ""}
-        OPTIONAL MATCH (user)-[:FILMED]-(:Video)<-[userVideoLiked:LIKED]-(:User)
-        OPTIONAL MATCH (user)-[:COMMENTED]-(:Comment)<-[userCommentLiked:LIKED]-(:User)
-        OPTIONAL MATCH (user)-[:FOLLOWS]->(userFollows:User)
-        OPTIONAL MATCH (userFollower:User)-[:FOLLOWS]->(user)
-        RETURN user, (COUNT(DISTINCT userVideoLiked) + COUNT(DISTINCT userCommentLiked)) AS userLikes,
-        COUNT(DISTINCT userFollows) AS userFollowing, COUNT(DISTINCT userFollower) AS userFollowers${auth.valid ? `,
-        EXISTS((me)-[:FOLLOWS]->(user)) AS userFollowedByYou, EXISTS((user)-[:FOLLOWS]->(me)) AS userFollowsYou
+        RETURN user${auth.valid ? `,
+          EXISTS((me)-[:FOLLOWS]->(user)) AS userFollowedByYou,
+          EXISTS((user)-[:FOLLOWS]->(me)) AS userFollowsYou
         ` : ""}
       `, {
         name: name,
@@ -176,13 +176,14 @@ class Database {
     try {
       let queryStr;
       if (remove) queryStr = `
-        MATCH (:User {name: $authenticatedUser})-[f:FOLLOWS]->(them:User {name: $username})
+        MATCH (me:User {name: $authenticatedUser})-[f:FOLLOWS]->(them:User {name: $username})
+        SET me.following = me.following - 1, them.followers = them.followers - 1
         DETACH DELETE f
-        RETURN them.name;
+        RETURN me.following, them.followers;
       `; else queryStr = `
         MATCH (me:User {name: $authenticatedUser}), (them:User {name: $username})
         MERGE (me)-[f:FOLLOWS]->(them)
-        ON CREATE SET f.since = timestamp()
+        ON CREATE SET f.since = timestamp(), me.following = me.following + 1, them.followers = them.followers + 1
         RETURN f;
       `;
       let query = await session.run(queryStr, {
@@ -211,8 +212,8 @@ class Database {
         MATCH (them:User)${followers ? "-" : "<-"}[:FOLLOWS]${followers ? "->" : "-"}(:User {name: $username})
         ${auth.valid ? "MATCH (me: User {name: $authenticatedUser})" : ""}
         RETURN them AS user${auth.valid ? `,
-        EXISTS((them)-[:FOLLOWS]->(me)) AS userFollowsYou,
-        EXISTS((me)-[:FOLLOWS]->(them)) AS userFollowedByYou
+          EXISTS((them)-[:FOLLOWS]->(me)) AS userFollowsYou,
+          EXISTS((me)-[:FOLLOWS]->(them)) AS userFollowedByYou
         ` : ""}
       `, {
         "authenticatedUser": auth.valid ? auth.username : undefined,
@@ -233,27 +234,25 @@ class Database {
   async createSound(auth: AuthData, desc: string): Promise<Sound | APIError> {
     if (!auth.valid) return APIError.Authentication;
 
-    let sound = new Sound({
-      id: uuid(),
-      createdAt: unixTime(),
-      desc: desc
-    } as Sound);
-
     let session = this.driver.session();
 
     try {
       let query = await session.run(`
-        MATCH (user: User)
-        WHERE user.name = $username
-        CREATE (user)-[r:RECORDED]->(sound: Sound $sound)
-        RETURN user, sound
+        MATCH (soundUser: User)
+        WHERE soundUser.name = $username
+        CREATE (soundUser)-[r:RECORDED]->(sound: Sound {
+          id: $id,
+          createdAt: timestamp(),
+          desc: $desc
+        })
+        RETURN sound, soundUser
       `, {
-        sound: sound,
+        id: uuid(),
+        desc: desc,
         username: auth.username
       });
       await session.close();
-      sound.user = query.records[0].get("user").properties;
-      return sound;
+      return Sound.fromQuery(query.records[0], "sound");
     } catch (error) {
       console.info("Error creating sound:", error);
       await session.close();
@@ -288,8 +287,7 @@ class Database {
     }
   }
 
-  async createVideo(auth: AuthData, soundId: string, src: string, desc: string): Promise<Video | APIError> {
-    if (src.length < 1) return new APIError("Invalid Video");
+  async createVideo(auth: AuthData, soundId: string, desc: string): Promise<Video | APIError> {
     if (!isUuid(soundId)) return new APIError("Invalid Sound ID");
 
     if (!auth.valid) return APIError.Authentication;
@@ -299,29 +297,27 @@ class Database {
       let sound = await this.getSound(soundId);
       if (sound.__typename == "APIError") return new APIError("Invalid Sound");
 
-      let video = new Video({
-        id: uuid(),
-        createdAt: unixTime(),
-        src: src,
-        desc: desc
-      } as Video);
-
       let query = await session.run(`
-        MATCH (user: User), (sound: Sound)
-        WHERE user.name = $username AND sound.id = $soundId
-        CREATE (user)-[ur:FILMED]->(video: Video $video)
-        CREATE (video)-[sr:USES]->(sound)
-        RETURN video, user
+        MATCH (videoUser:User), (videoSound:Sound)<-[:RECORDED]-(videoSoundUser:User)
+        WHERE videoUser.name = $username AND videoSound.id = $soundId
+        CREATE (videoUser)-[:FILMED]->(video: Video {
+          id: $id,
+          createdAt: timestamp(),
+          desc: $desc,
+          views: 0,
+          likes: 0,
+          comments: 0,
+          shares: 0
+        })-[sr:USES]->(videoSound)
+        RETURN video, videoUser, videoSound, videoSoundUser
       `, {
-        video: video,
+        id: uuid(),
+        desc: desc,
         username: auth.username,
         soundId: soundId
       });
       await session.close();
-      video.sound = sound as Sound;
-      video.user = query.records[0].get("user").properties;
-      video.views = video.likes = video.comments = 0;
-      return video;
+      return Video.fromQuery(query.records[0], "video");
     } catch (error) {
       console.info("Error creating video:", error);
       await session.close();
@@ -358,10 +354,7 @@ class Database {
       let query = await Database.queryVideo(session, "video", {
         authenticatedUser: auth.username,
         count: count
-      }, [
-        "MATCH", "", "WITH", "OPTIONAL MATCH", "RETURN",
-        "ORDER BY rand() LIMIT $count"
-      ]);
+      },"ORDER BY rand() LIMIT $count", false);
 
       if (query.records.length == 0) return [];
 
@@ -386,12 +379,14 @@ class Database {
 
     try {
       let query = await session.run(`
-        MATCH (user: User), (video: Video)
+        MATCH (user:User), (video:Video)<-[:FILMED]-(videoUser:User)
         WHERE user.name = $username AND video.id = $videoId
         MERGE (user)-[watch:WATCHED]->(video)
         ON MATCH SET watch.seconds = watch.seconds + $seconds
-        ON CREATE SET watch.seconds = $seconds
-        RETURN watch
+        ON CREATE SET watch.seconds = $seconds,
+        video.views = video.views + 1,
+        videoUser.views = videoUser.views + 1
+        RETURN watch, video.views
       `, {
         username: auth.username,
         videoId: videoId,
@@ -417,15 +412,19 @@ class Database {
 
     try {
       let query = await session.run(`
-        MATCH (user: User)${remove ? `-[like: LIKED]->` : ", "}(video: Video)
+        MATCH (user:User)${remove ? `-[like:LIKED]->` : ", "}(video:Video)<-[:FILMED]-(videoUser:User)
         WHERE user.name = $username AND video.id = $videoId
         ${remove ? `
           DETACH DELETE like
-          RETURN video.id
+          SET video.likes = video.likes - 1,
+          videoUser.likes = videoUser.likes - 1
+          RETURN video.likes
         ` : `
           MERGE (user)-[like: LIKED]->(video)
+          ON CREATE SET video.likes = video.likes + 1,
+          videoUser.likes = videoUser.likes + 1
           SET like.at = timestamp()
-          RETURN like
+          RETURN like, video.likes
         `}
       `, {
         username: auth.username,
@@ -445,27 +444,28 @@ class Database {
     if (body.length < 1) return new APIError("Comment cannot be empty");
 
     if (!auth.valid) return APIError.Authentication;
+
     let session = this.driver.session();
 
     try {
-      let query = await Database.queryVideo(session, "commentVideo", {
-        comment: {
-          id: uuid(),
-          createdAt: unixTime(),
-          body: body
-        },
+      let query = await session.run(`
+        MATCH (commentUser:User), (commentVideo:Video)
+        WHERE commentUser.name = $authenticatedUser AND commentVideo.id = $commentVideoId
+        CREATE (commentUser)-[:COMMENTED]->(comment: Comment {
+          id: $id,
+          createdAt: timestamp(),
+          body: $body,
+          likes: 0
+        })-[:ON]->(commentVideo)
+        SET commentVideo.comments = commentVideo.comments + 1
+        RETURN comment, commentUser
+      `, {
+        id: uuid(),
+        body: body,
         authenticatedUser: auth.username,
         commentVideoId: videoId
-      }, [
-        "MATCH (commentUser: User),",
-        "WHERE commentUser.name = $authenticatedUser AND commentVideo.id = $commentVideoId",
-        `CREATE (commentUser)-[r:COMMENTED]->(comment: Comment $comment)-[on: ON]->(commentVideo)
-        WITH comment, commentUser,`,
-        "OPTIONAL MATCH",
-        "RETURN comment, commentUser,"
-      ]);
+      });
       await session.close();
-
       if (query.records.length == 0) return new APIError("Invalid Video");
       return VideoComment.fromQuery(query.records[0], "comment");
     } catch (error) {
@@ -484,13 +484,18 @@ class Database {
 
     try {
       let query = await session.run(`
-        MATCH (user: User)${remove ? `-[like: LIKED]->` : ", "}(comment: Comment)
+        MATCH (user: User)${remove ? `-[like:LIKED]->` : ", "}(comment: Comment),
+        (commentUser:User)-[:COMMENTED]->(comment)
         WHERE user.name = $username AND comment.id = $commentId
         ${remove ? `
           DETACH DELETE like
+          SET comment.likes = comment.likes - 1, 
+          commentUser.likes = commentUser.likes - 1
           RETURN comment.id
         ` : `
           MERGE (user)-[like: LIKED]->(comment)
+          ON CREATE SET comment.likes = comment.likes + 1, 
+          commentUser.likes = commentUser.likes + 1
           SET like.at = timestamp()
           RETURN like
         `}
@@ -516,8 +521,7 @@ class Database {
       let query = await session.run(`
         MATCH (commentUser: User)-[:COMMENTED]->(comment: Comment)
         WHERE comment.id = $commentId
-        OPTIONAL MATCH (likeUser: User)-[:LIKED]->(comment)
-        RETURN comment, commentUser, COUNT(DISTINCT likeUser) AS commentLikes${auth.valid ? `,
+        RETURN comment, commentUser${auth.valid ? `,
         EXISTS((:User {name: $authenticatedUser})-[:LIKED]->(comment)) AS commentLiked` : ""}
       `, {
         commentId: id,
@@ -534,7 +538,7 @@ class Database {
     }
   }
 
-  // TODO: get more than 10 comments
+  // TODO: get comments with pagination
   async getComments(auth: AuthData, videoId: string): Promise<VideoComment[]> {
     if (!isUuid(videoId)) return [];
     let session = this.driver.session();
@@ -543,9 +547,8 @@ class Database {
       let query = await session.run(`
         MATCH (commentUser: User)-[:COMMENTED]->(comment: Comment)-[:ON]->(video: Video)
         WHERE video.id = $videoId
-        OPTIONAL MATCH (likeUser: User)-[:LIKED]->(comment)
-        RETURN comment, commentUser, COUNT(DISTINCT likeUser) AS commentLikes${auth.valid ? `,
-        EXISTS((:User {name: $authenticatedUser})-[:LIKED]->(comment)) AS commentLiked` : ""}
+        RETURN comment, commentUser
+        ${auth.valid ? `,EXISTS((:User {name: $authenticatedUser})-[:LIKED]->(comment)) AS commentLiked` : ""}
         LIMIT 10
       `, {
         videoId: videoId,
@@ -567,19 +570,14 @@ class Database {
     }
   }
 
-  private static async queryVideo(session: Session, name: string, props: any, query: string[] = [], matchVideoId = true) {
+  private static async queryVideo(session: Session, name: string, props: any, append: string = "", matchId: boolean = true) {
     return session.run(`
-      ${query.length > 0 ? query[0] : "MATCH"} (${name}SoundUser: User)-[:RECORDED]->(${name}Sound: Sound)<-[:USES]-(${name}${matchVideoId ? ": Video" : ""}),
-      (${name})<-[:FILMED]-(${name}User: User)
-      ${query.length > 1 ? query[1] : `WHERE ${name}.id = $${name}Id`}
-      ${query.length > 2 ? query[2] : "WITH"} ${name}, ${name}User, ${name}Sound, ${name}SoundUser
-      ${query.length > 3 ? query[3] : "OPTIONAL MATCH"} (${name})<-[${name}Watch: WATCHED]-(:User), 
-      (${name})<-[${name}Like: LIKED]-(:User), (${name})<-[${name}Comment: ON]-(:Comment)
-      ${query.length > 4 ? query[4] : "RETURN"} ${name}, ${name}User, ${name}Sound, ${name}SoundUser, 
-      COUNT(DISTINCT ${name}Watch) AS ${name}Views, COUNT(DISTINCT ${name}Like) AS ${name}Likes,
-      COUNT(DISTINCT ${name}Comment) AS ${name}Comments ${props.authenticatedUser ? `,
-      EXISTS((:User {name: $authenticatedUser})-[:LIKED]->(${name})) AS ${name}Liked` : ""}
-      ${query.length > 5 ? query[5] : ""}
+      MATCH (${name}User: User)-[:FILMED]->(${name}: Video),
+      (${name})-[:USES]->(${name}Sound: Sound)<-[:RECORDED]-(${name}SoundUser: User)
+      ${matchId ? `WHERE ${name}.id = $${name}Id` : ""}
+      RETURN ${name}, ${name}User, ${name}Sound, ${name}SoundUser${props.authenticatedUser ? `,
+        EXISTS((:User {name: $authenticatedUser})-[:LIKED]->(${name})) AS ${name}Liked
+      ` : ""}${append}
     `, props);
   }
 }

@@ -62,7 +62,7 @@ const resolvers: IResolvers = {
       return db.createSound(auth, args.desc);
     },
     async createVideo(_: void, args: any, auth: AuthData) {
-      return db.createVideo(auth, args.soundId, args.src, args.desc);
+      return db.createVideo(auth, args.soundId, args.desc);
     },
     async watchVideo(_: void, args: any, auth: AuthData) {
       return db.watchVideo(auth, args.videoId, args.seconds);

@@ -1,4 +1,5 @@
 import {User} from "./user";
+import {getNeo4JInt} from "../helpers";
 
 export class Sound {
   id: string;
@@ -8,7 +9,7 @@ export class Sound {
 
   constructor(sound: Sound) {
     this.id = sound.id;
-    this.createdAt = sound.createdAt;
+    this.createdAt = getNeo4JInt(sound.createdAt);
     this.desc = sound.desc;
     this.user = sound.user;
   }

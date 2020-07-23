@@ -13,9 +13,12 @@ const types = `
     name: String!
     createdAt: Int!
     displayName: String
+    profileBio: String
+    profileLink: String
     profilePicURL: String
     following: Int
     followers: Int
+    views: Int
     likes: Int
     followsYou: Boolean
     followedByYou: Boolean
@@ -92,7 +95,7 @@ const types = `
     followUser(username: String!, remove: Boolean = false): APIResponse!
     
     createSound(desc: String!): SoundInfo!
-    createVideo(soundId: String!, src: String!, desc: String!): VideoInfo!
+    createVideo(soundId: String!, desc: String!): VideoInfo!
     
     watchVideo(videoId: String!, seconds: Int!): WatchInfo!
     likeVideo(videoId: String!, remove: Boolean = false): APIResponse!
