@@ -105,6 +105,8 @@ const types = `
     createUser(name: String!, password: String!, displayName: String): UserInfo!
     login(username: String!, password: String!, device: String!): LoginInfo!
     
+    loginWithGoogle(idToken: String!): APIResponse!
+    
     followUser(username: String!, remove: Boolean = false): APIResponse!
     
     createSound(desc: String!): SoundInfo!

@@ -8,6 +8,7 @@ import {AuthData, Login, User} from "./struct/user";
 import {Sound} from "./struct/sound";
 import {Video, VideoComment, WatchData} from "./struct/video";
 import {UploadableVideo, VideoBuilderStatus} from "./struct/upload";
+import {verifyGoogleLogin} from "../google/login";
 
 class Database {
   driver: Driver;
@@ -146,6 +147,19 @@ class Database {
       await session.close();
       return APIError.Internal;
     }
+  }
+
+  async loginWithGoogle(idToken: string): Promise<APIResult> {
+    let payload = await verifyGoogleLogin(idToken);
+    if (!payload) return APIError.Authentication;
+
+    const email = payload.email;
+    const emailVerified = payload.email_verified;
+    const displayName = payload.name;
+    const profilePicURL = payload.picture;
+
+    console.info(`Logged in as ${email} (verified: ${emailVerified})... hello ${displayName} ur picture is ${profilePicURL}`)
+    return APIResult.Success;
   }
 
   async validateLogin(username: string, token: string): Promise<boolean> {

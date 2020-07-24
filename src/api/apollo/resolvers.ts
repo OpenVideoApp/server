@@ -53,6 +53,9 @@ const resolvers: IResolvers = {
     async login(_: void, args: any) {
       return db.login(args.username, args.password, args.device);
     },
+    async loginWithGoogle(_: void, args: any) {
+      return db.loginWithGoogle(args.idToken);
+    },
     async createUser(_: void, args: any) {
       return db.createUser(args.name, args.password, args.displayName);
     },
