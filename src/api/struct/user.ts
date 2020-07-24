@@ -1,5 +1,5 @@
 import {getNeo4JInt, getVarFromQuery, processInternalURL} from "../helpers";
-import bucket from "../../aws";
+import {mainBucket} from "../../aws";
 import jdenticon from "jdenticon";
 
 export class AuthData {
@@ -71,7 +71,7 @@ export class User {
   static async generateIcon(name: string): Promise<string | undefined> {
     let icon =  jdenticon.toPng(name, 200);
     let profilePicURL = name + ".jpg";
-    return bucket.upload(icon, "user", profilePicURL).then((success) => {
+    return mainBucket.upload(icon, "user", profilePicURL).then((success) => {
       if (success) console.info(`Generated icon for user '${name}'!`);
       else console.info(`Failed to generate icon for user '${name}`);
       return profilePicURL;

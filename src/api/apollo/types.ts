@@ -55,11 +55,24 @@ const types = `
     liked: Boolean!
   }
   
+  enum VideoBuilderStatus {
+    INITIATED
+    UPLOADED
+    TRANSCODED
+  }
+  
+  type UploadableVideo {
+    id: String!
+    uploadURL: String!
+    status: VideoBuilderStatus!
+  }
+  
   type WatchData {
     seconds: Int!
   }
   
   union VideoInfo = Video | APIError
+  union UploadableVideoInfo = UploadableVideo | APIError
   union WatchInfo = WatchData | APIError
   
   type Comment {
@@ -96,6 +109,9 @@ const types = `
     
     createSound(desc: String!): SoundInfo!
     createVideo(soundId: String!, desc: String!): VideoInfo!
+    
+    requestVideoUpload: UploadableVideoInfo!
+    handleCompletedVideoUpload(videoId: String!): APIResponse!
     
     watchVideo(videoId: String!, seconds: Int!): WatchInfo!
     likeVideo(videoId: String!, remove: Boolean = false): APIResponse!

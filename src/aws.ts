@@ -1,5 +1,6 @@
 import aws = require("aws-sdk");
 import * as path from "path";
+import {uuid} from "uuidv4";
 
 const REGION = "us-east-1";
 const ACCESS_KEY = process.env.AWS_ACCESS_KEY;
@@ -8,15 +9,16 @@ const SECRET_KEY = process.env.AWS_SECRET_KEY;
 aws.config.update({
   accessKeyId: ACCESS_KEY,
   secretAccessKey: SECRET_KEY,
-  region: REGION
+  signatureVersion: "v4",
+  region: REGION,
 });
 
 class S3Bucket {
   private s3: aws.S3;
-  private bucket: string;
+  private readonly bucket: string;
 
-  constructor(bucket: string) {
-    this.s3 = new aws.S3();
+  constructor(bucket: string, options: aws.S3.Types.ClientConfiguration = {}) {
+    this.s3 = new aws.S3(options);
     this.bucket = bucket;
   }
 
@@ -35,7 +37,61 @@ class S3Bucket {
       return false;
     }
   }
+
+  async getUploadURL(name: string): Promise<string> {
+    return this.s3.getSignedUrl("putObject", {
+      Bucket: this.bucket,
+      Key: "video/" + name + ".mp4",
+      Expires: 10 * 60, // 30 minutes
+      ContentType: "video/mp4"
+    });
+  }
 }
 
-const bucket = new S3Bucket("openvideo-raw");
-export default bucket;
+class ElasticTranscoder {
+  private transcoder: aws.ElasticTranscoder;
+
+  constructor() {
+    this.transcoder = new aws.ElasticTranscoder({
+      apiVersion: '2012-09-25'
+    });
+  }
+
+  async startTranscoding(id: string): Promise<boolean> {
+    return this.transcoder.createJob({
+      // OpenVideo Compression Pipeline
+      PipelineId: "1595510695744-a75dx6",
+      OutputKeyPrefix: `video/${id}/`,
+      Input: {
+        Key: `video/${id}.mp4`
+      },
+      Outputs: [
+        {
+          // 1080p Portrait 1024kb
+          PresetId: "1595519577560-jis67i",
+          Key: "compressed-1024kb.mp4",
+          Rotate: "auto"
+        }
+      ]
+    }).promise().then(() => {
+      console.info(`Started transcoding video #${id}!`);
+      return true;
+    }).catch((error) => {
+      console.warn(`Failed to start transcoding job with id #${id}:`, error);
+      return false;
+    });
+  }
+}
+
+const mainBucket = new S3Bucket("openvideo-raw");
+
+const uploadBucket = new S3Bucket("openvideo-upload", {
+  endpoint: "openvideo-upload.s3-accelerate.amazonaws.com",
+  region: "us-east-1",
+  signatureVersion: "v4",
+  useAccelerateEndpoint: true,
+});
+
+const transcoder = new ElasticTranscoder();
+
+export {mainBucket, uploadBucket, transcoder};

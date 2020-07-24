@@ -1,8 +1,16 @@
-import {ApolloServer, gql} from "apollo-server";
+import express from "express";
+import {ApolloServer, gql} from "apollo-server-express";
 import types from "./api/apollo/types";
 import resolvers from "./api/apollo/resolvers";
 import db from "./api/db";
 import {AuthData} from "./api/struct/user";
+import {handleNotification} from "./sns/handler";
+
+const app = express();
+
+app.post("/sns", express.text(), (req, res) => {
+  res.send(handleNotification(req));
+});
 
 const server = new ApolloServer({
   typeDefs: gql(types),
@@ -16,6 +24,8 @@ const server = new ApolloServer({
   }
 });
 
-server.listen().then(({url}: {url: string}) => {
-  console.info(`Test server ready at ${url}`);
+server.applyMiddleware({app});
+
+app.listen({port: 4000}, () => {
+  console.log("Server running on port 4000!");
 });

@@ -13,14 +13,19 @@
   "dependencies": {
     "@types/bcrypt": "^3.0.0",
     "@types/uuid": "^8.0.0",
+    "@types/requestretry": "^1.12.7",
+    "@types/lru-cache": "^5.1.0",
     "typescript": "^3.9.6",
     "aws-sdk": "^2.712.0",
     "graphql": "^15.3.0",
-    "apollo-server": "^2.16.0",
+    "apollo-server-express": "^2.16.0",
     "neo4j-driver": "^4.1.0",
     "bcrypt": "^5.0.0",
     "uuidv4": "^6.2.0",
-    "jdenticon": "^2.2.0"
+    "jdenticon": "^2.2.0",
+    "request": "^2.88.2",
+    "requestretry": "^4.1.1",
+    "lru-cache": "^6.0.0"
   },
   "repository": {
     "type": "git",

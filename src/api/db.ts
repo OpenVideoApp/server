@@ -2,10 +2,12 @@ import neo4j, {Driver, Session} from "neo4j-driver";
 import {isUuid, uuid} from "uuidv4";
 import bcrypt = require("bcrypt");
 
-import {APIError, APIResult, unixTime} from "./helpers";
+import {transcoder, uploadBucket} from "../aws";
+import {APIError, APIResult, processInternalURL, unixTime} from "./helpers";
 import {AuthData, Login, User} from "./struct/user";
 import {Sound} from "./struct/sound";
 import {Video, VideoComment, WatchData} from "./struct/video";
+import {UploadableVideo, VideoBuilderStatus} from "./struct/upload";
 
 class Database {
   driver: Driver;
@@ -325,7 +327,6 @@ class Database {
     }
   }
 
-
   async getVideo(auth: AuthData, id: string): Promise<Video | APIError> {
     if (!isUuid(id)) return new APIError("Invalid Video ID");
     let session = this.driver.session();
@@ -367,6 +368,119 @@ class Database {
     } catch (error) {
       console.warn("Failed to get videos:", error);
       return [];
+    }
+  }
+
+  async requestVideoUpload(auth: AuthData): Promise<UploadableVideo | APIError> {
+    if (!auth.valid) return APIError.Authentication;
+    let session = this.driver.session();
+    let id = uuid();
+
+    try {
+      let query = await session.run(`
+        MATCH (user:User)-[:INITIATED]->(upload:VideoBuilder)
+        WHERE user.name = $authenticatedUser
+        OPTIONAL MATCH (user)-[:INITIATED]->(oldUpload:VideoBuilder)
+        WHERE timestamp() - oldUpload.startedAt > 60000 * 30
+        DETACH DELETE oldUpload
+        RETURN COUNT(DISTINCT upload) AS builders
+      `, {
+        authenticatedUser: auth.username
+      });
+
+      let builders = neo4j.int(query.records[0].get("builders")).toInt();
+      if (builders > 3) {
+        await session.close();
+        return new APIError("Too many concurrent uploads!");
+      }
+
+      query = await session.run(`
+        MATCH (user:User)
+        WHERE user.name = $authenticatedUser
+        CREATE (user)-[:INITIATED]->(builder:VideoBuilder {
+          id: $id,
+          startedAt: timestamp(),
+          status: ${VideoBuilderStatus.INITIATED}
+        })
+        RETURN builder
+      `, {
+        authenticatedUser: auth.username,
+        id: id
+      });
+
+      await session.close();
+      if (query.records.length == 0) return APIError.Internal;
+
+      let url = await uploadBucket.getUploadURL(id);
+
+      return new UploadableVideo(id, url, VideoBuilderStatus.INITIATED);
+    } catch (error) {
+      await session.close();
+      console.warn("Failed to handle video upload request:", error);
+      return APIError.Internal;
+    }
+  }
+
+  async handleCompletedVideoUpload(auth: AuthData, videoId: string): Promise<APIResult> {
+    if (!auth.valid) return APIError.Authentication;
+    if (!isUuid(videoId)) return new APIError("Invalid Video ID");
+    let session = this.driver.session();
+
+    try {
+      let query = await session.run(`
+        MATCH (user:User)-[:INITIATED]->(builder:VideoBuilder)
+        WHERE user.name = $authenticatedUser AND builder.id = $videoId 
+        AND builder.status = ${VideoBuilderStatus.INITIATED}
+        SET builder.status = ${VideoBuilderStatus.UPLOADED}
+        RETURN builder;
+      `, {
+        "authenticatedUser": auth.username,
+        "videoId": videoId
+      });
+
+      if (query.records.length == 0) return new APIError("Invalid Video ID");
+      await session.close();
+
+      let success = await transcoder.startTranscoding(videoId);
+      return success ? APIResult.Success : APIError.Internal;
+    } catch (error) {
+      await session.close();
+      console.warn("Failed to mark VideoBuilder as uploaded:", error);
+      return APIError.Internal;
+    }
+  }
+
+  async handleCompletedTranscoding(videoId: string, folder: string, file: string) {
+    if (!isUuid(videoId)) {
+      console.warn(`Tried to handle completed transcoding with invalid video ID #${videoId}`);
+      return false;
+    }
+
+    let session = this.driver.session();
+
+    try {
+      let query = await session.run(`
+        MATCH (builder:VideoBuilder)
+        WHERE builder.id = $videoId 
+        AND builder.status = ${VideoBuilderStatus.UPLOADED}
+        SET builder.status = ${VideoBuilderStatus.TRANSCODED}
+        RETURN builder;
+      `, {
+        "videoId": videoId
+      });
+
+      await session.close();
+
+      if (query.records.length == 0) {
+        console.warn(`Tried to handle transcoding for invalid video ID #${videoId}`);
+        return false;
+      }
+
+      console.info(`Finished transcoding video #${videoId} to ${processInternalURL(folder, file)}`);
+      return true;
+    } catch (error) {
+      console.warn("Failed to mark VideoBuiilder transcoding as complete:", error);
+      return false;
     }
   }
 

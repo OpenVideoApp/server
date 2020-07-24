@@ -17,6 +17,7 @@ const resolvers: IResolvers = {
   UserInfo: resolveType("User"),
   SoundInfo: resolveType("Sound"),
   VideoInfo: resolveType("Video"),
+  UploadableVideoInfo: resolveType("UploadableVideo"),
   WatchInfo: resolveType("WatchData"),
   CommentInfo: resolveType("Comment"),
   Query: {
@@ -63,6 +64,12 @@ const resolvers: IResolvers = {
     },
     async createVideo(_: void, args: any, auth: AuthData) {
       return db.createVideo(auth, args.soundId, args.desc);
+    },
+    async requestVideoUpload(_: void, args: any, auth: AuthData) {
+      return db.requestVideoUpload(auth);
+    },
+    async handleCompletedVideoUpload(_: void, args: any, auth: AuthData) {
+      return db.handleCompletedVideoUpload(auth, args.videoId);
     },
     async watchVideo(_: void, args: any, auth: AuthData) {
       return db.watchVideo(auth, args.videoId, args.seconds);
