@@ -30,8 +30,14 @@ const types = `
     user: User!
   }
   
-  union LoginInfo = Login | APIError
+  type LoginError {
+    error: String!
+    forUsername: Boolean!
+    forPassword: Boolean!
+  }
+  
   union UserInfo = User | APIError
+  union LoginInfo = Login | LoginError
   
   type Sound {
     id: String!
@@ -102,7 +108,7 @@ const types = `
   }
   
   type Mutation {
-    createUser(name: String!, password: String!, displayName: String): UserInfo!
+    createUser(name: String!, password: String!, device: String): LoginInfo!
     login(username: String!, password: String!, device: String!): LoginInfo!
     
     loginWithGoogle(idToken: String!): APIResponse!

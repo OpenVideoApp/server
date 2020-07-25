@@ -4,7 +4,7 @@ import bcrypt = require("bcrypt");
 
 import {transcoder, uploadBucket} from "../aws";
 import {APIError, APIResult, processInternalURL, unixTime} from "./helpers";
-import {AuthData, Login, User} from "./struct/user";
+import {AuthData, Login, LoginError, User} from "./struct/user";
 import {Sound} from "./struct/sound";
 import {Video, VideoComment, WatchData} from "./struct/video";
 import {UploadableVideo, VideoBuilderStatus} from "./struct/upload";
@@ -15,9 +15,9 @@ class Database {
 
   constructor(host?: string, user?: string, pass?: string) {
     this.driver = neo4j.driver(
-        host || "bolt://localhost:8000",
-        neo4j.auth.basic(user || 'neo4j', pass || "password"),
-        {encrypted: false}
+      host || "bolt://localhost:8000",
+      neo4j.auth.basic(user || 'neo4j', pass || "password"),
+      {encrypted: false}
     );
     this.driver.verifyConnectivity().then((serverInfo) => {
       console.info(`Connected to database on '${serverInfo.address}' with version '${serverInfo.version}'`);
@@ -26,11 +26,11 @@ class Database {
     });
   }
 
-  async createUser(name: string, password: string, displayName: string): Promise<User | APIError> {
+  async createUser(name: string, password: string, device: string): Promise<Login | LoginError> {
     if (name.length < User.MIN_USERNAME_LENGTH) {
-      return new APIError(`Username must be at least ${User.MIN_USERNAME_LENGTH} characters`);
+      return new LoginError(`Username must be at least ${User.MIN_USERNAME_LENGTH} characters`, true);
     } else if (password.length < User.MIN_PASSWORD_LENGTH) {
-      return new APIError(`Password must be at least ${User.MIN_PASSWORD_LENGTH} characters`);
+      return new LoginError(`Password must be at least ${User.MIN_PASSWORD_LENGTH} characters`, false, true);
     }
 
     let session = this.driver.session();
@@ -44,36 +44,41 @@ class Database {
         name: name
       });
 
-      if (result.records.length > 0) return new APIError("User already exists!");
+      if (result.records.length > 0) return new LoginError("That username is taken", true);
       let passwordHash = await bcrypt.hash(password, 10);
 
       let profilePicURL = await User.generateIcon(name);
       if (!profilePicURL) console.warn(`Failed to generate icon for user '${name}'`);
+
+      let login = new Login(unixTime(), uuid(), device);
 
       let query = await session.run(`
         CREATE (user:User {
           name: $name,
           createdAt: timestamp(),
           passwordHash: $passwordHash,
-          displayName: $displayName,
-          profileBio: "", profileLink: "",
+          displayName: "",
+          profileBio: "",
+          profileLink: "",
           profilePicURL: $profilePicURL,
           views: 0, likes: 0,
           following: 0, followers: 0
-        })
-        RETURN user
+        })-[r:AUTHENTICATED_ON]->(login: Login $login)
+        RETURN user, login
       `, {
         name: name,
         passwordHash: passwordHash,
-        displayName: displayName,
-        profilePicURL: profilePicURL
+        profilePicURL: profilePicURL,
+        login: login
       });
       await session.close();
-      return User.fromQuery(query.records[0], "user");
+      if (query.records.length == 0) return LoginError.Generic;
+      login.user = User.fromQuery(query.records[0], "user");
+      return login;
     } catch (error) {
       console.info("Error creating user:", error);
       await session.close();
-      return APIError.Internal;
+      return LoginError.Generic;
     }
   }
 
@@ -102,25 +107,25 @@ class Database {
     }
   }
 
-  async login(username: string, password: string, device: string): Promise<Login | APIError> {
-    if (username.length < User.MIN_USERNAME_LENGTH) return new APIError("Invalid Username");
-    if (password.length < User.MIN_PASSWORD_LENGTH) return new APIError("Invalid Password");
+  async login(username: string, password: string, device: string): Promise<Login | LoginError> {
+    if (username.length < User.MIN_USERNAME_LENGTH) return new LoginError("Invalid Username", true);
+    if (password.length < User.MIN_PASSWORD_LENGTH) return new LoginError("Invalid Password", false, true);
 
     let session = this.driver.session();
     let user = await this.getUser(AuthData.Invalid, username, session);
 
     if (user.__typename == "APIError") {
       await session.close();
-      return new APIError("Invalid User");
+      return new LoginError("That user doesn't exist", true);
     }
 
     user = user as User;
 
     let hash = user.passwordHash;
-    if (!hash) return new APIError("Password Error");
+    if (!hash) return new LoginError("Please sign in with google");
 
     let validPassword = await bcrypt.compare(password, hash);
-    if (!validPassword) return new APIError("Incorrect Password");
+    if (!validPassword) return new LoginError("Incorrect Password", false, true);
 
     let timestamp = unixTime();
     let token = uuid();
@@ -140,12 +145,12 @@ class Database {
         username: username
       });
       await session.close();
-      if (results.records.length == 0) return new APIError("Database Error");
+      if (results.records.length == 0) return LoginError.Generic;
       return new Login(timestamp, token, device, user);
     } catch (error) {
       console.warn(`Failed to login as '${username}':`, error);
       await session.close();
-      return APIError.Internal;
+      return LoginError.Generic;
     }
   }
 
@@ -369,7 +374,7 @@ class Database {
       let query = await Database.queryVideo(session, "video", {
         authenticatedUser: auth.username,
         count: count
-      },"ORDER BY rand() LIMIT $count", false);
+      }, "ORDER BY rand() LIMIT $count", false);
 
       if (query.records.length == 0) return [];
 
@@ -711,9 +716,9 @@ class Database {
 }
 
 const db = new Database(
-    process.env.NEO_HOST,
-    process.env.NEO_USER,
-    process.env.NEO_PASS
+  process.env.NEO_HOST,
+  process.env.NEO_USER,
+  process.env.NEO_PASS
 );
 
 export default db;

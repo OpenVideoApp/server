@@ -14,13 +14,32 @@ export class AuthData {
   static Invalid = new AuthData(false);
 }
 
+export class LoginError {
+  error: string;
+  forUsername: boolean;
+  forPassword: boolean;
+
+  static Generic = new LoginError("An error occurred");
+
+  constructor(error: string, forUsername: boolean = false, forPassword: boolean = false) {
+    this.error = error;
+    this.forUsername = forUsername;
+    this.forPassword = forPassword;
+  }
+
+  get __typename() {
+    return "LoginError";
+  }
+}
+
+
 export class Login {
   since: number;
   token: string;
   device: string;
   user?: User;
 
-  constructor(since: number, token: string, device: string, user: User) {
+  constructor(since: number, token: string, device: string, user?: User) {
     this.since = since;
     this.token = token;
     this.device = device;

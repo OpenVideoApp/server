@@ -3,17 +3,17 @@ import db from "../db";
 import {AuthData} from "../struct/user";
 import {APIError, APIResult} from "../helpers";
 
-function resolveType(expected: String) {
+function resolveType(expected: string, fallback: string = "APIError") {
   return {
     __resolveType(obj: any) {
-      return obj.error ? "APIError" : expected;
+      return obj.error ? fallback : expected;
     }
   }
 }
 
 const resolvers: IResolvers = {
   APIResponse: resolveType("APIResult"),
-  LoginInfo: resolveType("Login"),
+  LoginInfo: resolveType("Login", "LoginError"),
   UserInfo: resolveType("User"),
   SoundInfo: resolveType("Sound"),
   VideoInfo: resolveType("Video"),
@@ -57,7 +57,7 @@ const resolvers: IResolvers = {
       return db.loginWithGoogle(args.idToken);
     },
     async createUser(_: void, args: any) {
-      return db.createUser(args.name, args.password, args.displayName);
+      return db.createUser(args.name, args.password, args.device);
     },
     async followUser(_: void, args: any, auth: AuthData) {
       return db.followUser(auth, args.username, args.remove);
