@@ -390,10 +390,11 @@ class Database {
     }
   }
 
-  async requestVideoUpload(auth: AuthData): Promise<UploadableVideo | APIError> {
+  async uploadVideo(auth: AuthData, desc: string, soundDesc: string): Promise<UploadableVideo | APIError> {
     if (!auth.valid) return APIError.Authentication;
     let session = this.driver.session();
     let id = uuid();
+    let soundId = uuid();
 
     try {
       let query = await session.run(`
@@ -419,12 +420,21 @@ class Database {
         CREATE (user)-[:INITIATED]->(builder:VideoBuilder {
           id: $id,
           startedAt: timestamp(),
-          status: ${VideoBuilderStatus.INITIATED}
-        })
+          status: ${VideoBuilderStatus.INITIATED},
+          desc: $desc
+        })-[:USES]->(sound:SoundBuilder {
+          id: $soundId,
+          startedAt: timestamp(),
+          status: ${VideoBuilderStatus.INITIATED},
+          desc: $soundDesc
+        })<-[:INITIATED]-(user)
         RETURN builder
       `, {
         authenticatedUser: auth.username,
-        id: id
+        id: id,
+        desc: desc,
+        soundId: soundId,
+        soundDesc: soundDesc
       });
 
       await session.close();
@@ -432,6 +442,7 @@ class Database {
 
       let url = await uploadBucket.getUploadURL(id);
 
+      console.info(`Created upload link for video with description '${desc}'`);
       return new UploadableVideo(id, url, VideoBuilderStatus.INITIATED);
     } catch (error) {
       await session.close();
@@ -479,13 +490,29 @@ class Database {
 
     try {
       let query = await session.run(`
-        MATCH (builder:VideoBuilder)
-        WHERE builder.id = $videoId 
-        AND builder.status = ${VideoBuilderStatus.UPLOADED}
-        SET builder.status = ${VideoBuilderStatus.TRANSCODED}
-        RETURN builder;
+        MATCH (videoUser:User)-[:INITIATED]->(videoBuilder:VideoBuilder)-[:USES]->(soundBuilder:SoundBuilder)<-[:INITIATED]-(soundUser:User)
+        WHERE videoBuilder.id = $videoId AND videoBuilder.status = ${VideoBuilderStatus.UPLOADED}
+        
+        CREATE (videoUser)-[:FILMED]->(video: Video {
+          id: videoBuilder.id,
+          createdAt: timestamp(),
+          src: $videoSrc,
+          desc: videoBuilder.desc,
+          views: 0,
+          likes: 0,
+          comments: 0,
+          shares: 0
+        })-[:USES]->(sound: Sound {
+          id: soundBuilder.id,
+          createdAt: timestamp(),
+          desc: soundBuilder.desc
+        })<-[:RECORDED]-(soundUser)
+        
+        DETACH DELETE videoBuilder, soundBuilder
+        RETURN video, videoUser, sound, soundUser;
       `, {
-        "videoId": videoId
+        "videoId": videoId,
+        "videoSrc": file,
       });
 
       await session.close();

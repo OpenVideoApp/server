@@ -118,7 +118,7 @@ const types = `
     createSound(desc: String!): SoundInfo!
     createVideo(soundId: String!, desc: String!): VideoInfo!
     
-    requestVideoUpload: UploadableVideoInfo!
+    uploadVideo(desc: String!, soundDesc: String!): UploadableVideoInfo!
     handleCompletedVideoUpload(videoId: String!): APIResponse!
     
     watchVideo(videoId: String!, seconds: Int!): WatchInfo!

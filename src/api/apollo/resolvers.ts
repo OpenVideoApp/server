@@ -68,8 +68,8 @@ const resolvers: IResolvers = {
     async createVideo(_: void, args: any, auth: AuthData) {
       return db.createVideo(auth, args.soundId, args.desc);
     },
-    async requestVideoUpload(_: void, args: any, auth: AuthData) {
-      return db.requestVideoUpload(auth);
+    async uploadVideo(_: void, args: any, auth: AuthData) {
+      return db.uploadVideo(auth, args.desc, args.soundDesc);
     },
     async handleCompletedVideoUpload(_: void, args: any, auth: AuthData) {
       return db.handleCompletedVideoUpload(auth, args.videoId);

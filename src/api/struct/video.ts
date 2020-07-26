@@ -18,7 +18,7 @@ export class Video {
   constructor(video: Video) {
     this.id = video.id;
     this.createdAt = getNeo4JInt(video.createdAt);
-    this.src = processInternalURL("video", video.id + ".mp4");
+    this.src = processInternalURL("video/" + video.id, video.src);
     this.desc = video.desc;
     this.views = video.views || 0;
     this.likes = video.likes || 0;
