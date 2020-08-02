@@ -451,38 +451,43 @@ class Database {
     }
   }
 
-  async handleCompletedVideoUpload(auth: AuthData, videoId: string): Promise<APIResult> {
-    if (!auth.valid) return APIError.Authentication;
-    if (!isUuid(videoId)) return new APIError("Invalid Video ID");
+  async handleCompletedUpload(videoId: string): Promise<boolean> {
+    if (!isUuid(videoId)) {
+      console.warn(`Tried to handle completed upload with invalid video ID '${videoId}'`);
+      return false;
+    }
+
     let session = this.driver.session();
 
     try {
       let query = await session.run(`
-        MATCH (user:User)-[:INITIATED]->(builder:VideoBuilder)
-        WHERE user.name = $authenticatedUser AND builder.id = $videoId 
+        MATCH (builder:VideoBuilder)
+        WHERE builder.id = $videoId 
         AND builder.status = ${VideoBuilderStatus.INITIATED}
         SET builder.status = ${VideoBuilderStatus.UPLOADED}
         RETURN builder;
       `, {
-        "authenticatedUser": auth.username,
         "videoId": videoId
       });
 
-      if (query.records.length == 0) return new APIError("Invalid Video ID");
       await session.close();
 
-      let success = await transcoder.startTranscoding(videoId);
-      return success ? APIResult.Success : APIError.Internal;
+      if (query.records.length == 0) {
+        console.error(`Tried to handle video upload with unknown ID '${videoId}' (${typeof videoId})`);
+        return false;
+      }
+
+      return transcoder.startTranscoding(videoId);
     } catch (error) {
       await session.close();
       console.warn("Failed to mark VideoBuilder as uploaded:", error);
-      return APIError.Internal;
+      return false;
     }
   }
 
-  async handleCompletedTranscoding(videoId: string, folder: string, file: string) {
+  async handleCompletedTranscoding(videoId: string, folder: string, file: string): Promise<boolean> {
     if (!isUuid(videoId)) {
-      console.warn(`Tried to handle completed transcoding with invalid video ID #${videoId}`);
+      console.warn(`Tried to handle completed transcoding with invalid video ID '${videoId}'`);
       return false;
     }
 
@@ -518,7 +523,7 @@ class Database {
       await session.close();
 
       if (query.records.length == 0) {
-        console.warn(`Tried to handle transcoding for invalid video ID #${videoId}`);
+        console.warn(`Tried to handle transcoding for invalid video ID '${videoId}'`);
         return false;
       }
 

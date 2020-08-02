@@ -119,7 +119,6 @@ const types = `
     createVideo(soundId: String!, desc: String!): VideoInfo!
     
     uploadVideo(desc: String!, soundDesc: String!): UploadableVideoInfo!
-    handleCompletedVideoUpload(videoId: String!): APIResponse!
     
     watchVideo(videoId: String!, seconds: Int!): WatchInfo!
     likeVideo(videoId: String!, remove: Boolean = false): APIResponse!

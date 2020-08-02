@@ -1,6 +1,6 @@
 import aws = require("aws-sdk");
 import * as path from "path";
-import {uuid} from "uuidv4";
+import {isUuid, uuid} from "uuidv4";
 
 const REGION = "us-east-1";
 const ACCESS_KEY = process.env.AWS_ACCESS_KEY;
@@ -58,6 +58,11 @@ class ElasticTranscoder {
   }
 
   async startTranscoding(id: string): Promise<boolean> {
+    if (!isUuid(id)) {
+      console.warn(`Tried to start transcoding with invalid uuid '${id}'!`);
+      return false;
+    }
+
     return this.transcoder.createJob({
       // OpenVideo Compression Pipeline
       PipelineId: "1595510695744-a75dx6",
