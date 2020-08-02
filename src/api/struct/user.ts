@@ -1,6 +1,8 @@
 import {getNeo4JInt, getVarFromQuery, processInternalURL} from "../helpers";
 import {mainBucket} from "../../aws";
 import jdenticon from "jdenticon";
+import {Video} from "./video";
+import {Sound} from "./sound";
 
 export class AuthData {
   valid: boolean;
@@ -60,11 +62,12 @@ export class User {
   profileBio?: string;
   profileLink?: string;
   profilePicURL?: string;
+  videos?: Video[] = [];
   following?: number;
   followers?: number;
   views?: number;
   likes?: number;
-  followsYou?: boolean;
+  followsYou?: boolean = false;
   followedByYou?: boolean;
 
   static MIN_USERNAME_LENGTH = 3;
@@ -105,6 +108,23 @@ export class User {
     user.followsYou = getVarFromQuery(res, prop, "FollowsYou", false);
     user.followedByYou = getVarFromQuery(res, prop, "FollowedByYou", false);
     return user;
+  }
+
+  collateVideos(res: Record<string, any>, prop: string): void {
+    this.videos = [];
+
+    let videos = res.get(prop + "Videos");
+    let sounds = res.get(prop + "VideoSounds");
+    let soundUsers = res.get(prop + "VideoSoundUsers");
+
+    for (let i = 0; i < videos.length; i++) {
+      let video = new Video(videos[i].properties);
+      video.user = this;
+      video.sound = new Sound(sounds[i].properties);
+      video.sound.user = new User(soundUsers[i].properties);
+
+      this.videos.push(video);
+    }
   }
 
   get __typename() {

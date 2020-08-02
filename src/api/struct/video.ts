@@ -6,6 +6,7 @@ export class Video {
   id: string;
   createdAt: number;
   src: string;
+  previewSrc: string;
   desc: string;
   views: number;
   likes: number;
@@ -19,11 +20,12 @@ export class Video {
     this.id = video.id;
     this.createdAt = getNeo4JInt(video.createdAt);
     this.src = processInternalURL("video/" + video.id, video.src);
+    this.previewSrc = processInternalURL("video/" + video.id, video.previewSrc);
     this.desc = video.desc;
-    this.views = video.views || 0;
-    this.likes = video.likes || 0;
+    this.views = getNeo4JInt(video.views) || 0;
+    this.likes = getNeo4JInt(video.likes) || 0;
     this.shares = video.shares || 0;
-    this.comments = video.comments || 0;
+    this.comments = getNeo4JInt(video.comments) || 0;
     this.liked = video.liked || false;
     this.user = video.user;
     this.sound = video.sound;
@@ -31,9 +33,6 @@ export class Video {
 
   static fromQuery(res: Record<string, any>, prop: string): Video {
     let video = new Video(res.get(prop).properties);
-    video.views = getNeo4JInt(video.views);
-    video.likes = getNeo4JInt(video.likes);
-    video.comments = getNeo4JInt(video.comments);
     video.user = User.fromQuery(res, prop + "User");
     video.sound = Sound.fromQuery(res, prop + "Sound");
     video.liked = getVarFromQuery(res, prop, "Liked", false);

@@ -15,11 +15,12 @@ const types = `
     displayName: String
     profileBio: String
     profileLink: String
-    profilePicURL: String
-    following: Int
-    followers: Int
-    views: Int
-    likes: Int
+    profilePicURL: String!
+    videos: [Video!]
+    following: Int!
+    followers: Int!
+    views: Int!
+    likes: Int!
     followsYou: Boolean
     followedByYou: Boolean
   }
@@ -54,6 +55,7 @@ const types = `
     user: User!
     sound: Sound!
     src: String!
+    previewSrc: String!
     desc: String!
     views: Int!
     likes: Int!

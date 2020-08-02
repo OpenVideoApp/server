@@ -87,9 +87,12 @@ class Database {
     let session: Session = existingSession || this.driver.session();
     try {
       let result = await session.run(`
-        MATCH (user:User) WHERE user.name = $name
+        MATCH (user:User)
+        WHERE user.name = $name
         ${auth.valid ? "MATCH (me:User) WHERE me.name = $authenticatedUser" : ""}
-        RETURN user${auth.valid ? `,
+        OPTIONAL MATCH (user)-[:FILMED]->(userVideo:Video)-[:USES]->(userVideoSound:Sound)<-[:RECORDED]-(userVideoSoundUser:User)
+        RETURN DISTINCT(user), COLLECT(userVideo) AS userVideos, COLLECT(userVideoSound) AS userVideoSounds,
+        COLLECT(userVideoSoundUser) AS userVideoSoundUsers${auth.valid ? `,
           EXISTS((me)-[:FOLLOWS]->(user)) AS userFollowedByYou,
           EXISTS((user)-[:FOLLOWS]->(me)) AS userFollowsYou
         ` : ""}
@@ -99,7 +102,9 @@ class Database {
       });
       if (!existingSession) await session.close();
       if (result.records.length == 0) return new APIError("Missing User");
-      return User.fromQuery(result.records[0], "user");
+      let user = User.fromQuery(result.records[0], "user");
+      user.collateVideos(result.records[0], "user");
+      return user;
     } catch (error) {
       console.info("Error getting user:", error);
       if (!existingSession) await session.close();
@@ -485,7 +490,7 @@ class Database {
     }
   }
 
-  async handleCompletedTranscoding(videoId: string, folder: string, file: string): Promise<boolean> {
+  async handleCompletedTranscoding(videoId: string, folder: string, file: string, thumbnail: string): Promise<boolean> {
     if (!isUuid(videoId)) {
       console.warn(`Tried to handle completed transcoding with invalid video ID '${videoId}'`);
       return false;
@@ -502,6 +507,7 @@ class Database {
           id: videoBuilder.id,
           createdAt: timestamp(),
           src: $videoSrc,
+          previewSrc: $previewSrc,
           desc: videoBuilder.desc,
           views: 0,
           likes: 0,
@@ -518,6 +524,7 @@ class Database {
       `, {
         "videoId": videoId,
         "videoSrc": file,
+        "previewSrc": thumbnail
       });
 
       await session.close();

@@ -1,6 +1,6 @@
 import aws = require("aws-sdk");
 import * as path from "path";
-import {isUuid, uuid} from "uuidv4";
+import {isUuid} from "uuidv4";
 
 const REGION = "us-east-1";
 const ACCESS_KEY = process.env.AWS_ACCESS_KEY;
@@ -75,6 +75,7 @@ class ElasticTranscoder {
           // 1080p Portrait 1024kb
           PresetId: "1595519577560-jis67i",
           Key: "compressed-1024kb.mp4",
+          ThumbnailPattern: "prev-{count}",
           Rotate: "auto"
         }
       ]

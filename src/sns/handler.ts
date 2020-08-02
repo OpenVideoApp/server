@@ -1,6 +1,5 @@
 import {validateMessage} from "./verification";
 import db from "../api/db";
-import {transcoder} from "../aws";
 
 const FILENAME_PATTERN = /[ \w-]+?(?=\.)/;
 
@@ -10,21 +9,23 @@ const UPLOAD_COMPLETE_ARN = "arn:aws:sns:us-east-1:534819052976:OpenVideoUploadC
 async function handleCompletedTranscoding(msg: any) {
   let videoId = msg.input.key.match(FILENAME_PATTERN);
   let outputPrefix = msg.outputKeyPrefix;
-
   let outputs = msg.outputs;
 
   if (outputs.length != 1) return console.warn("Multiple transcoding outputs are currently unsupported!");
 
   let output = outputs[0];
   let file = output.key;
+  let thumbnail = output.thumbnailPattern.replace("{count}", "00001") + ".jpg";
 
-  return db.handleCompletedTranscoding(videoId[0].toString(), outputPrefix, file);
+  return db.handleCompletedTranscoding(videoId[0].toString(), outputPrefix, file, thumbnail);
 }
 
 async function handleUploadComplete(msg: any) {
   let record = msg.Records[0];
-  let videoId = record.s3.object.key.match(FILENAME_PATTERN);
+  let key = record.s3.object.key;
+  let videoId = key.match(FILENAME_PATTERN);
 
+  console.info(`Received notification for uploaded file '${key}'`);
   return db.handleCompletedUpload(videoId.toString());
 }
 
